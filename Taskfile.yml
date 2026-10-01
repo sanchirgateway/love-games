@@ -1,0 +1,81 @@
+version: "3"
+
+dotenv: [".env.dev"]
+
+vars:
+  COMPOSE: docker compose -f docker-compose.dev.yml
+
+tasks:
+  default:
+    desc: Список задач
+    cmds:
+      - task --list
+    silent: true
+
+  install:
+    desc: Установить зависимости
+    cmds:
+      - uv sync
+
+  db:up:
+    desc: Поднять Postgres и дождаться готовности
+    cmds:
+      - "{{.COMPOSE}} up -d --wait db"
+
+  db:down:
+    desc: Остановить Postgres
+    cmds:
+      - "{{.COMPOSE}} down"
+
+  db:reset:
+    desc: Удалить Postgres вместе с данными и поднять заново
+    prompt: Все данные БД будут удалены. Продолжить?
+    cmds:
+      - "{{.COMPOSE}} down -v"
+      - task: db:up
+      - task: migrate
+
+  db:logs:
+    desc: Логи Postgres
+    cmds:
+      - "{{.COMPOSE}} logs -f db"
+
+  # --- Миграции ---
+
+  migrate:
+    desc: Накатить все миграции
+    cmds:
+      - uv run alembic upgrade head
+
+  migrate:new:
+    desc: 'Создать миграцию по моделям: task migrate:new -- "описание"'
+    preconditions:
+      - sh: '[ -n "{{.CLI_ARGS}}" ]'
+        msg: 'Укажите описание: task migrate:new -- "create dates"'
+    cmds:
+      - uv run alembic revision --autogenerate -m "{{.CLI_ARGS}}"
+
+  migrate:down:
+    desc: Откатить последнюю миграцию
+    cmds:
+      - uv run alembic downgrade -1
+
+  migrate:status:
+    desc: Текущая ревизия и история миграций
+    cmds:
+      - uv run alembic current
+      - uv run alembic history --indicate-current
+
+  # --- Запуск ---
+
+  run:
+    desc: Запустить приложение
+    cmds:
+      - uv run uvicorn app.main:app --reload --port 8000
+
+  dev:
+    desc: Поднять БД, накатить миграции и запустить приложение
+    cmds:
+      - task: db:up
+      - task: migrate
+      - task: run
