@@ -1,44 +1,17 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import (
-    BigInteger,
-    CheckConstraint,
-    DateTime,
-    Enum,
-    ForeignKey,
-    SmallInteger,
-    String,
-    Text,
-    func,
-)
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, SmallInteger, String, Text, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-
-class Base(DeclarativeBase):
-    pass
-
-
-class User(Base):
-    __tablename__ = "users"
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)  # Telegram user id
-    username: Mapped[str | None] = mapped_column(String(32))
-    first_name: Mapped[str] = mapped_column(String(64))
-    last_name: Mapped[str | None] = mapped_column(String(64))
-    photo_url: Mapped[str | None] = mapped_column(String(512))
-    timezone: Mapped[str] = mapped_column(String(64), default="Europe/Moscow", server_default="Europe/Moscow")
-
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
-
-    dates: Mapped[list["DateEvent"]] = relationship(back_populates="creator", cascade="all, delete-orphan")
+from app.core.db import Base
+from app.feature.user.models import User
 
 
 class DateStatus(enum.StrEnum):
-    PLANNED = "planned"
+    PROPOSED = "proposed"  # предложено, ждём ответа приглашённого
+    PLANNED = "planned"  # принято
+    DECLINED = "declined"  # приглашённый отказался
     DONE = "done"
     CANCELLED = "cancelled"
 
@@ -66,7 +39,6 @@ class DateEvent(Base):
         index=True,
     )
 
-
     rating: Mapped[int | None] = mapped_column(SmallInteger)
     review: Mapped[str | None] = mapped_column(Text)
 
@@ -75,7 +47,11 @@ class DateEvent(Base):
     remind_hours_before_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    creator: Mapped["User"] = relationship(back_populates="dates")
+    invitee_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+
+    # lazy="joined": автор и приглашённый подгружаются тем же запросом (в async ленивая загрузка не работает)
+    creator: Mapped[User] = relationship(foreign_keys=[created_by], lazy="joined")
+    invitee: Mapped[User] = relationship(foreign_keys=[invitee_id], lazy="joined")
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

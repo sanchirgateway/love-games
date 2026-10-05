@@ -68,4 +68,5 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_dates_created_by'), table_name='dates')
     op.drop_table('dates')
     op.drop_table('users')
+    sa.Enum(name='date_status').drop(op.get_bind(), checkfirst=True)
     # ### end Alembic commands ###

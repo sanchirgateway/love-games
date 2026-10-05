@@ -27,7 +27,7 @@ db_settings = DbSettings()  # pyright: ignore[reportCallIssue]  # поля чи�
 
 class BotSettings(BaseSettings):
     token: str
-    webapp_url: str | None = None  # https-адрес Mini App, без него кнопка не показывается
+    webapp_url: str | None = None
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         env_prefix="BOT_",
@@ -38,3 +38,18 @@ class BotSettings(BaseSettings):
 
 
 bot_settings = BotSettings()  # pyright: ignore[reportCallIssue]  # поля читаются из env
+
+
+class AppSettings(BaseSettings):
+    # В debug-режиме API принимает заголовок X-Debug-User-Id вместо initData (для Swagger)
+    debug: bool = False
+
+    model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
+        env_prefix="APP_",
+        env_file=".env.dev",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+
+app_settings = AppSettings()
