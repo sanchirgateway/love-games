@@ -40,6 +40,19 @@ tasks:
     cmds:
       - "{{.COMPOSE}} logs -f db"
 
+  # --- Хранилище фото ---
+
+  storage:up:
+    desc: Поднять MinIO и создать bucket
+    cmds:
+      - "{{.COMPOSE}} up -d --wait minio"
+      - "{{.COMPOSE}} run --rm minio-init"
+
+  storage:logs:
+    desc: Логи MinIO
+    cmds:
+      - "{{.COMPOSE}} logs -f minio"
+
   # --- Миграции ---
 
   migrate:
@@ -73,9 +86,20 @@ tasks:
     cmds:
       - uv run uvicorn app.main:app --reload --port 8000
 
+  up:
+    desc: Запустить всё в Docker (БД, MinIO, миграции, приложение)
+    cmds:
+      - "{{.COMPOSE}} up -d --build app"
+
+  logs:
+    desc: Логи приложения в Docker
+    cmds:
+      - "{{.COMPOSE}} logs -f app"
+
   dev:
-    desc: Поднять БД, накатить миграции и запустить приложение
+    desc: Поднять БД и MinIO, накатить миграции и запустить приложение
     cmds:
       - task: db:up
+      - task: storage:up
       - task: migrate
       - task: run

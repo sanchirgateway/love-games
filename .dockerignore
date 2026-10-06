@@ -1,0 +1,18 @@
+# Всё, что не нужно в образе: меньше контекст сборки и нет секретов внутри
+.git
+.gitignore
+.idea
+.zed
+.vscode
+.venv
+**/__pycache__
+**/*.py[oc]
+.env
+.env.*
+docs
+*.md
+Taskfile.yml
+docker-compose*.yml
+Dockerfile
+.dockerignore
+.python-version

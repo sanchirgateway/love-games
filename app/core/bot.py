@@ -6,13 +6,31 @@ from aiogram import BaseMiddleware, Bot, Dispatcher, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import ExceptionTypeFilter
-from aiogram.types import ErrorEvent, TelegramObject
+from aiogram.types import BotCommand, BotCommandScopeDefault, ErrorEvent, TelegramObject
 
 from app.core.db import session_maker
 from app.core.errors import AppError
 from config.config import bot_settings
 
 logger = logging.getLogger(__name__)
+
+# Единый список команд: из него строится меню в Telegram и текст /help
+BOT_COMMANDS = [
+    BotCommand(command="start", description="Начать"),
+    BotCommand(command="new", description="Предложить свидание"),
+    BotCommand(command="pair", description="Связаться с партнёром"),
+    BotCommand(command="cancel", description="Отменить текущее действие"),
+    BotCommand(command="help", description="Список команд"),
+]
+
+
+def commands_help() -> str:
+    return "\n".join(f"/{c.command} — {c.description}" for c in BOT_COMMANDS)
+
+
+async def set_commands(bot: Bot) -> None:
+    """Регистрирует команды в Telegram: появляется кнопка «Меню» и подсказки при вводе «/»."""
+    _ = await bot.set_my_commands(BOT_COMMANDS, scope=BotCommandScopeDefault())
 
 
 class DbSessionMiddleware(BaseMiddleware):

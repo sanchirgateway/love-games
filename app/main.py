@@ -8,7 +8,7 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.core import health
-from app.core.bot import create_bot, create_dispatcher
+from app.core.bot import create_bot, create_dispatcher, set_commands
 from app.core.db import engine
 from app.core.errors import AppError
 from app.feature.dates import handlers as dates_handlers
@@ -24,6 +24,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     bot = create_bot()
     app.state.bot = bot  # нужен API для отправки уведомлений
     dp = create_dispatcher(user_handlers.router, dates_handlers.router)
+    await set_commands(bot)
     polling = asyncio.create_task(dp.start_polling(bot, handle_signals=False))
 
     yield

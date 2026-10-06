@@ -1,13 +1,15 @@
+from uuid import UUID
+
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
 class DateAnswer(CallbackData, prefix="date"):
-    date_id: int
+    date_id: UUID
     accept: bool
 
 
-def invite_keyboard(date_id: int) -> InlineKeyboardMarkup:
+def invite_keyboard(date_id: UUID) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [

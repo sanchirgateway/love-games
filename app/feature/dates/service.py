@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,7 +50,7 @@ class DateService:
         await self.session.commit()
         return date
 
-    async def respond(self, date_id: int, user_id: int, accept: bool) -> DateEvent:
+    async def respond(self, date_id: UUID, user_id: int, accept: bool) -> DateEvent:
         """Ответ приглашённого: принять или отказаться."""
         date = await self.get_for_user(date_id, user_id)
         if date.invitee_id != user_id:
@@ -61,7 +62,7 @@ class DateService:
         await self.session.commit()
         return date
 
-    async def get_for_user(self, date_id: int, user_id: int) -> DateEvent:
+    async def get_for_user(self, date_id: UUID, user_id: int) -> DateEvent:
         date = await self.repo.get(date_id)
         if date is None or user_id not in (date.created_by, date.invitee_id):
             raise NotFoundError("Свидание не найдено")

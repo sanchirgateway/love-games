@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, status
 
 from app.core.api import BotDep, SessionDep
@@ -23,19 +25,19 @@ async def create_date(body: DateCreate, user: CurrentUser, session: SessionDep, 
 
 
 @router.get("/{date_id}", response_model=DateOut)
-async def get_date(date_id: int, user: CurrentUser, session: SessionDep) -> DateEvent:
+async def get_date(date_id: UUID, user: CurrentUser, session: SessionDep) -> DateEvent:
     return await DateService(session).get_for_user(date_id, user.id)
 
 
 @router.post("/{date_id}/accept", response_model=DateOut)
-async def accept_date(date_id: int, user: CurrentUser, session: SessionDep, bot: BotDep) -> DateEvent:
+async def accept_date(date_id: UUID, user: CurrentUser, session: SessionDep, bot: BotDep) -> DateEvent:
     date = await DateService(session).respond(date_id, user.id, accept=True)
     await notify.send_answer(bot, date)
     return date
 
 
 @router.post("/{date_id}/decline", response_model=DateOut)
-async def decline_date(date_id: int, user: CurrentUser, session: SessionDep, bot: BotDep) -> DateEvent:
+async def decline_date(date_id: UUID, user: CurrentUser, session: SessionDep, bot: BotDep) -> DateEvent:
     date = await DateService(session).respond(date_id, user.id, accept=False)
     await notify.send_answer(bot, date)
     return date

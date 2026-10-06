@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from uuid import UUID
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +17,7 @@ class DateRepository:
         await self.session.refresh(date, ["creator", "invitee"])
         return date
 
-    async def get(self, date_id: int) -> DateEvent | None:
+    async def get(self, date_id: UUID) -> DateEvent | None:
         return await self.session.get(DateEvent, date_id)
 
     async def list_for_user(self, user_id: int, upcoming_only: bool = False) -> list[DateEvent]:
