@@ -31,9 +31,8 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:?}
       POSTGRES_DB: ${DB_DATABASE:?}
       TZ: UTC
-    # Только на localhost сервера: снаружи порт закрыт, DataGrip подключается через SSH-туннель
     ports:
-      - "127.0.0.1:${DB_EXTERNAL_PORT:-5432}:5432"
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
