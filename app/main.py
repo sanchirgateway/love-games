@@ -13,6 +13,7 @@ from app.core.db import engine
 from app.core.errors import AppError
 from app.feature.dates import handlers as dates_handlers
 from app.feature.dates import router as dates_router
+from app.feature.reviews import handlers as reviews_handlers
 from app.feature.user import handlers as user_handlers
 from app.feature.user import router as user_router
 
@@ -23,7 +24,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     bot = create_bot()
     app.state.bot = bot  # нужен API для отправки уведомлений
-    dp = create_dispatcher(user_handlers.router, dates_handlers.router)
+    dp = create_dispatcher(user_handlers.router, dates_handlers.router, reviews_handlers.router)
     await set_commands(bot)
     polling = asyncio.create_task(dp.start_polling(bot, handle_signals=False))
 

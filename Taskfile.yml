@@ -43,15 +43,20 @@ tasks:
   # --- Хранилище фото ---
 
   storage:up:
-    desc: Поднять MinIO и создать bucket
+    desc: Поднять SeaweedFS и создать bucket
     cmds:
-      - "{{.COMPOSE}} up -d --wait minio"
-      - "{{.COMPOSE}} run --rm minio-init"
+      - "{{.COMPOSE}} up -d --wait seaweedfs"
+      - "{{.COMPOSE}} run --rm seaweedfs-init"
 
   storage:logs:
-    desc: Логи MinIO
+    desc: Логи SeaweedFS
     cmds:
-      - "{{.COMPOSE}} logs -f minio"
+      - "{{.COMPOSE}} logs -f seaweedfs"
+
+  bot:avatar:
+    desc: 'Поставить аватарку бота: task bot:avatar [-- path/to/photo.png]'
+    cmds:
+      - uv run python -m app.scripts.set_avatar {{.CLI_ARGS}}
 
   # --- Миграции ---
 
@@ -87,7 +92,7 @@ tasks:
       - uv run uvicorn app.main:app --reload --port 8000
 
   up:
-    desc: Запустить всё в Docker (БД, MinIO, миграции, приложение)
+    desc: Запустить всё в Docker (БД, SeaweedFS, миграции, приложение)
     cmds:
       - "{{.COMPOSE}} up -d --build app"
 
@@ -97,7 +102,7 @@ tasks:
       - "{{.COMPOSE}} logs -f app"
 
   dev:
-    desc: Поднять БД и MinIO, накатить миграции и запустить приложение
+    desc: Поднять БД и SeaweedFS, накатить миграции и запустить приложение
     cmds:
       - task: db:up
       - task: storage:up

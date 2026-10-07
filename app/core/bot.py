@@ -6,6 +6,7 @@ from aiogram import BaseMiddleware, Bot, Dispatcher, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import ExceptionTypeFilter
+from aiogram.fsm.storage.memory import SimpleEventIsolation
 from aiogram.types import BotCommand, BotCommandScopeDefault, ErrorEvent, TelegramObject
 
 from app.core.db import session_maker
@@ -14,11 +15,13 @@ from config.config import bot_settings
 
 logger = logging.getLogger(__name__)
 
-# Единый список команд: из него строится меню в Telegram и текст /help
+# Единый список команд: из него строится меню в Telegram и текст /help.
+# /start сюда не входит: его уже нажали, а новому пользователю Telegram сам покажет кнопку «Старт»
 BOT_COMMANDS = [
-    BotCommand(command="start", description="Начать"),
     BotCommand(command="new", description="Предложить свидание"),
+    BotCommand(command="dates", description="Мои свидания"),
     BotCommand(command="pair", description="Связаться с партнёром"),
+    BotCommand(command="review", description="Оставить отзыв о свидании"),
     BotCommand(command="cancel", description="Отменить текущее действие"),
     BotCommand(command="help", description="Список команд"),
 ]
@@ -62,7 +65,8 @@ def create_bot() -> Bot:
 
 
 def create_dispatcher(*routers: Router) -> Dispatcher:
-    dp = Dispatcher()
+    # Апдейты одного чата обрабатываются по очереди: иначе фото из альбома гонятся за состояние FSM
+    dp = Dispatcher(events_isolation=SimpleEventIsolation())
     dp.update.middleware(DbSessionMiddleware())
     _ = dp.errors.register(on_app_error, ExceptionTypeFilter(AppError))
     dp.include_routers(*routers)

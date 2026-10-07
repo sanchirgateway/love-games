@@ -7,7 +7,6 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
-    SmallInteger,
     String,
     Text,
     func,
@@ -29,7 +28,6 @@ class DateStatus(enum.StrEnum):
 class DateEvent(Base):
     __tablename__ = "dates"
     __table_args__ = (
-        CheckConstraint("rating BETWEEN 1 AND 5", name="ck_dates_rating_range"),
         CheckConstraint("ends_at IS NULL OR ends_at > starts_at", name="ck_dates_ends_after_starts"),
     )
 
@@ -48,9 +46,6 @@ class DateEvent(Base):
         server_default=DateStatus.PLANNED.value,
         index=True,
     )
-
-    rating: Mapped[int | None] = mapped_column(SmallInteger)
-    review: Mapped[str | None] = mapped_column(Text)
 
     remind_two_day_before_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     remind_day_before_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -1,6 +1,11 @@
+import os
 from typing import ClassVar
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Файл с переменными для локального запуска. Переменные окружения всегда важнее файла,
+# а если файла нет (как в Docker-образе), он просто пропускается.
+ENV_FILE = os.getenv("ENV_FILE", ".env.dev")
 
 
 class DbSettings(BaseSettings):
@@ -12,7 +17,7 @@ class DbSettings(BaseSettings):
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         env_prefix="DB_",
-        env_file=".env.dev",
+        env_file=ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -31,7 +36,7 @@ class BotSettings(BaseSettings):
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         env_prefix="BOT_",
-        env_file=".env.dev",
+        env_file=ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -46,10 +51,26 @@ class AppSettings(BaseSettings):
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         env_prefix="APP_",
-        env_file=".env.dev",
+        env_file=ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
     )
 
 
 app_settings = AppSettings()
+
+class S3Settings(BaseSettings):
+    endpoint: str
+    access_key: str
+    secret_key: str
+    bucket: str
+
+    model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
+        env_prefix="S3_",
+        env_file=ENV_FILE,
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+
+s3_settings = S3Settings()  # pyright: ignore[reportCallIssue]  # поля читаются из env

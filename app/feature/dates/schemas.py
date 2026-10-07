@@ -27,8 +27,6 @@ class DateOut(BaseModel):
     starts_at: datetime
     ends_at: datetime | None
     status: DateStatus
-    rating: int | None
-    review: str | None
     creator: UserShort
     invitee: UserShort
     created_at: datetime
