@@ -70,3 +70,23 @@ class DateService:
 
     async def list_for_user(self, user_id: int, upcoming_only: bool = False) -> list[DateEvent]:
         return await self.repo.list_for_user(user_id, upcoming_only)
+
+    # --- Для админ-API: без проверки, что пользователь участник свидания ---
+
+    async def get(self, date_id: UUID) -> DateEvent:
+        date = await self.repo.get(date_id)
+        if date is None:
+            raise NotFoundError("Свидание не найдено")
+        return date
+
+    async def list_all(
+        self,
+        user_id: int | None = None,
+        status: DateStatus | None = None,
+        upcoming_only: bool = False,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[DateEvent]:
+        return await self.repo.list_all(
+            user_id=user_id, status=status, upcoming_only=upcoming_only, limit=limit, offset=offset
+        )

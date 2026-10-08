@@ -89,7 +89,8 @@ tasks:
   run:
     desc: Запустить приложение
     cmds:
-      - uv run uvicorn app.main:app --reload --port 8000
+      # Не uvicorn --reload: на Windows он шлёт Ctrl+C всей консоли, и nushell закрывается
+      - uv run python scripts/dev.py --port 8000
 
   up:
     desc: Запустить всё в Docker (БД, SeaweedFS, миграции, приложение)

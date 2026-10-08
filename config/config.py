@@ -48,6 +48,10 @@ bot_settings = BotSettings()  # pyright: ignore[reportCallIssue]  # поля ч�
 class AppSettings(BaseSettings):
     # В debug-режиме API принимает заголовок X-Debug-User-Id вместо initData (для Swagger)
     debug: bool = False
+    # Ключ для /api/v1/admin/* (заголовок X-API-Key). Пусто — админ-API выключено (503)
+    admin_api_key: str | None = None
+    # Домены фронта для CORS через запятую (https://app.example.com). В debug не нужны — разрешён любой
+    cors_origins: str = ""
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         env_prefix="APP_",
