@@ -36,9 +36,9 @@ _STATUS_LABELS = {
 
 
 def status_label(date: DateEvent) -> tuple[str, str]:
-    """Значок и подпись статуса. Принятое свидание, время которого прошло, считаем состоявшимся."""
+    """Значок и подпись статуса. Принятое свидание, которое началось, но ещё не отмечено состоявшимся, — идёт."""
     if date.status == DateStatus.PLANNED:
-        return ("✅", "Состоялось") if date.starts_at <= datetime.now(UTC) else ("📅", "Запланировано")
+        return ("💞", "Идёт") if date.starts_at <= datetime.now(UTC) else ("📅", "Запланировано")
     return _STATUS_LABELS[date.status]
 
 
@@ -52,6 +52,24 @@ class DateList(CallbackData, prefix="date_list"):
 
 class DatePhotos(CallbackData, prefix="date_photos"):
     date_id: UUID
+
+
+class DateDone(CallbackData, prefix="date_done"):
+    date_id: UUID
+
+
+class DateResend(CallbackData, prefix="date_resend"):
+    date_id: UUID
+
+
+def can_resend_invite(date: DateEvent, user_id: int) -> bool:
+    """Автор может повторить приглашение, пока на него не ответили (например, если первое не дошло)."""
+    return date.status == DateStatus.PROPOSED and date.created_by == user_id
+
+
+def can_mark_done(date: DateEvent) -> bool:
+    """Принятое свидание, которое уже началось, можно отметить состоявшимся, не дожидаясь автоматики."""
+    return date.status == DateStatus.PLANNED and date.starts_at <= datetime.now(UTC)
 
 
 def dates_list_keyboard(dates: list[DateEvent], tz: str) -> InlineKeyboardMarkup:
@@ -68,8 +86,22 @@ def dates_list_keyboard(dates: list[DateEvent], tz: str) -> InlineKeyboardMarkup
     )
 
 
-def date_detail_keyboard(date_id: UUID, can_review: bool, photos_count: int) -> InlineKeyboardMarkup:
+def date_detail_keyboard(
+    date_id: UUID, can_review: bool, photos_count: int, can_mark_done: bool, can_resend_invite: bool
+) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
+    if can_resend_invite:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🔁 Отправить приглашение ещё раз", callback_data=DateResend(date_id=date_id).pack()
+                )
+            ]
+        )
+    if can_mark_done:
+        rows.append(
+            [InlineKeyboardButton(text="✅ Свидание состоялось", callback_data=DateDone(date_id=date_id).pack())]
+        )
     if photos_count:
         rows.append(
             [

@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.feature.dates.models import DateEvent, DateStatus
@@ -46,5 +46,33 @@ class DateRepository:
             stmt = stmt.where(DateEvent.status == status)
         if upcoming_only:
             stmt = stmt.where(DateEvent.starts_at >= datetime.now(UTC))
+        result = await self.session.scalars(stmt)
+        return list(result)
+
+    async def mark_done_started_before(self, cutoff: datetime) -> list[UUID]:
+        """Переводит принятые свидания, начавшиеся до cutoff, в «состоялось». Возвращает их id."""
+        stmt = (
+            update(DateEvent)
+            .where(DateEvent.status == DateStatus.PLANNED, DateEvent.starts_at <= cutoff)
+            .values(status=DateStatus.DONE, done_at=func.now())
+            .returning(DateEvent.id)
+            .execution_options(synchronize_session=False)
+        )
+        result = await self.session.scalars(stmt)
+        return list(result)
+
+    async def list_by_ids(self, date_ids: list[UUID]) -> list[DateEvent]:
+        result = await self.session.scalars(select(DateEvent).where(DateEvent.id.in_(date_ids)))
+        return list(result)
+
+    async def list_to_remind(self, now: datetime, horizon: datetime) -> list[DateEvent]:
+        """Принятые свидания между now и horizon, по которым ещё не ушло последнее напоминание."""
+        stmt = select(DateEvent).where(
+            DateEvent.status == DateStatus.PLANNED,
+            DateEvent.starts_at > now,
+            DateEvent.starts_at <= horizon,
+            # Последнее напоминание отмечается вместе со всеми предыдущими: раз его нет — что-то может быть к отправке
+            DateEvent.remind_hours_before_sent_at.is_(None),
+        )
         result = await self.session.scalars(stmt)
         return list(result)

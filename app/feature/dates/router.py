@@ -20,7 +20,7 @@ async def list_dates(user: CurrentUser, session: SessionDep, upcoming: bool = Fa
 @router.post("", response_model=DateOut, status_code=status.HTTP_201_CREATED)
 async def create_date(body: DateCreate, user: CurrentUser, session: SessionDep, bot: BotDep) -> DateEvent:
     date = await DateService(session).propose(author_id=user.id, **body.model_dump())
-    await notify.send_invite(bot, date)
+    _ = await notify.send_invite(bot, date)
     return date
 
 

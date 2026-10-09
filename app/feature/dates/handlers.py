@@ -12,14 +12,18 @@ from app.core.time import parse_local_datetime
 from app.feature.dates import notify
 from app.feature.dates.keyboards import (
     DateAnswer,
+    DateDone,
     DateList,
     DateOpen,
     DatePhotos,
+    DateResend,
+    can_mark_done,
+    can_resend_invite,
     date_detail_keyboard,
     dates_list_keyboard,
     status_label,
 )
-from app.feature.dates.models import DateStatus
+from app.feature.dates.models import DateEvent, DateStatus
 from app.feature.dates.service import DateService
 from app.feature.reviews import notify as review_notify
 from app.feature.reviews.service import ReviewService, can_review
@@ -97,10 +101,15 @@ async def new_place(message: Message, state: FSMContext, session: AsyncSession, 
         starts_at=datetime.fromisoformat(str(data["starts_at"])),
         place=None if place == "-" else place[:200],
     )
-    await notify.send_invite(bot, date)
-    await message.answer(
-        f"Отправил приглашение {date.invitee.first_name} 💌\n\n{notify.describe(date, date.creator)}"
-    )
+    name = escape(date.invitee.first_name)
+    if await notify.send_invite(bot, date):
+        result = f"Отправил приглашение {name} 💌"
+    else:
+        result = (
+            f"😕 Не получилось доставить приглашение {name} — возможно, бот у партнёра остановлен.\n"
+            "Попросите открыть бота и отправьте ещё раз из карточки свидания: /dates"
+        )
+    await message.answer(f"{result}\n\n{notify.describe(date, date.creator)}")
 
 
 @router.callback_query(DateAnswer.filter())
@@ -145,10 +154,7 @@ async def back_to_dates(callback: CallbackQuery, session: AsyncSession) -> None:
     _ = await callback.answer()
 
 
-@router.callback_query(DateOpen.filter())
-async def open_date(callback: CallbackQuery, callback_data: DateOpen, session: AsyncSession) -> None:
-    user_id = callback.from_user.id
-    date = await DateService(session).get_for_user(callback_data.date_id, user_id)
+async def _date_card(session: AsyncSession, date: DateEvent, user_id: int) -> tuple[str, InlineKeyboardMarkup]:
     reviews = await ReviewService(session).list_for_date(date.id)
 
     viewer = date.creator if date.created_by == user_id else date.invitee
@@ -161,10 +167,49 @@ async def open_date(callback: CallbackQuery, callback_data: DateOpen, session: A
         parts.append(f"<b>{title}</b>\n{review_notify.describe(review, REVIEW_FIELD_PREVIEW)}{photos}")
 
     photos_count = sum(len(review.photos) for review in reviews)
-    keyboard = date_detail_keyboard(date.id, can_review(date, reviews, user_id), photos_count)
+    keyboard = date_detail_keyboard(
+        date.id,
+        can_review(date, reviews, user_id),
+        photos_count,
+        can_mark_done(date),
+        can_resend_invite(date, user_id),
+    )
+    return "\n\n".join(parts), keyboard
+
+
+@router.callback_query(DateOpen.filter())
+async def open_date(callback: CallbackQuery, callback_data: DateOpen, session: AsyncSession) -> None:
+    date = await DateService(session).get_for_user(callback_data.date_id, callback.from_user.id)
+    text, keyboard = await _date_card(session, date, callback.from_user.id)
     if callback.message is not None and not isinstance(callback.message, InaccessibleMessage):
-        _ = await callback.message.edit_text("\n\n".join(parts), reply_markup=keyboard)
+        _ = await callback.message.edit_text(text, reply_markup=keyboard)
     _ = await callback.answer()
+
+
+@router.callback_query(DateResend.filter())
+async def resend_invite(callback: CallbackQuery, callback_data: DateResend, session: AsyncSession, bot: Bot) -> None:
+    date = await DateService(session).get_invite_to_resend(callback_data.date_id, callback.from_user.id)
+    if await notify.send_invite(bot, date):
+        _ = await callback.answer(f"Отправил приглашение {date.invitee.first_name} ещё раз 💌")
+    else:
+        _ = await callback.answer(
+            f"Не получилось доставить приглашение {date.invitee.first_name}. "
+            "Скорее всего, бот у партнёра остановлен — попросите открыть его и нажать «Старт»",
+            show_alert=True,
+        )
+
+
+@router.callback_query(DateDone.filter())
+async def mark_date_done(callback: CallbackQuery, callback_data: DateDone, session: AsyncSession, bot: Bot) -> None:
+    user_id = callback.from_user.id
+    date = await DateService(session).mark_done(callback_data.date_id, user_id)
+    author, partner = (date.creator, date.invitee) if date.created_by == user_id else (date.invitee, date.creator)
+    await review_notify.send_marked_done(bot, date, author, partner)
+
+    text, keyboard = await _date_card(session, date, user_id)
+    if callback.message is not None and not isinstance(callback.message, InaccessibleMessage):
+        _ = await callback.message.edit_text(text, reply_markup=keyboard)
+    _ = await callback.answer("Отметили 💞 Теперь можно оставить отзыв")
 
 
 @router.callback_query(DatePhotos.filter())

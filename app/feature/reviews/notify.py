@@ -10,7 +10,9 @@ from aiogram.types.media_union import MediaUnion
 
 from app.core import storage
 from app.feature.dates.models import DateEvent
+from app.feature.reviews.keyboards import review_request_keyboard
 from app.feature.reviews.models import DateReview
+from app.feature.user.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,38 @@ def describe(review: DateReview, max_field_length: int | None = None) -> str:
     if review.comment:
         lines.append(f"\n{field(review.comment)}")
     return "\n".join(lines)
+
+
+async def send_review_request(bot: Bot, date: DateEvent) -> None:
+    """Просит обоих участников оставить отзыв о состоявшемся свидании."""
+    text = f"💭 Как прошло свидание «{escape(date.title)}»? Поделитесь впечатлениями"
+    for user in (date.creator, date.invitee):
+        await _ask_review(bot, date, user, text)
+
+
+async def send_marked_done(bot: Bot, date: DateEvent, author: User, partner: User) -> None:
+    """Сообщает партнёру, что author отметил свидание состоявшимся, и просит отзыв."""
+    text = (
+        f"💞 {escape(author.first_name)} отметил(а), что свидание «{escape(date.title)}» состоялось\n\n"
+        "Как вам? Поделитесь впечатлениями"
+    )
+    await _ask_review(bot, date, partner, text)
+
+
+async def send_review_reminder(bot: Bot, date: DateEvent, user: User) -> None:
+    text = (
+        f"🙂 Вы ещё не рассказали, как прошло свидание «{escape(date.title)}»\n\n"
+        "Если найдётся минутка — пара слов и пара фото, и воспоминание останется с вами"
+    )
+    await _ask_review(bot, date, user, text)
+
+
+async def _ask_review(bot: Bot, date: DateEvent, user: User, text: str) -> None:
+    # Просьба не критична: ошибка отправки (например, бот заблокирован) не должна мешать остальным
+    try:
+        _ = await bot.send_message(user.id, text, reply_markup=review_request_keyboard(date.id))
+    except TelegramAPIError:
+        logger.exception("Не удалось попросить отзыв о свидании %s у пользователя %s", date.id, user.id)
 
 
 async def send_review(bot: Bot, review: DateReview, date: DateEvent) -> None:

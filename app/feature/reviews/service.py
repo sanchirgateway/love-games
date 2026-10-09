@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy.exc import IntegrityError
@@ -11,9 +11,15 @@ from app.core.errors import AppError, ConflictError
 from app.feature.dates.models import DateEvent
 from app.feature.dates.service import DateService
 from app.feature.reviews.models import MAX_REVIEW_PHOTOS, DateReview, DateReviewPhoto
-from app.feature.reviews.repository import REVIEWABLE_STATUSES, ReviewRepository
+from app.feature.reviews.repository import REVIEWABLE_STATUS, ReviewRepository
+from app.feature.user.models import User
 
 logger = logging.getLogger(__name__)
+
+# Через сколько после того, как свидание состоялось, мягко напомнить об отзыве
+REVIEW_REMINDER_AFTER = timedelta(days=1)
+# О давних свиданиях не напоминаем: после простоя бота такие напоминания пришли бы пачкой
+REVIEW_REMINDER_MAX_AGE = timedelta(days=2)
 
 
 @dataclass(frozen=True)
@@ -26,8 +32,7 @@ class NewPhoto:
 def can_review(date: DateEvent, reviews: list[DateReview], user_id: int) -> bool:
     """Те же условия, что в check_can_review, но по уже загруженным данным — для показа кнопки."""
     return (
-        date.status in REVIEWABLE_STATUSES
-        and date.starts_at <= datetime.now(UTC)
+        date.status == REVIEWABLE_STATUS
         and all(review.author_id != user_id for review in reviews)
     )
 
@@ -41,16 +46,30 @@ class ReviewService:
     async def check_can_review(self, date_id: UUID, author_id: int) -> DateEvent:
         """Проверяет, что пользователь может оставить отзыв, и возвращает свидание."""
         date = await self.dates.get_for_user(date_id, author_id)
-        if date.status not in REVIEWABLE_STATUSES:
-            raise ConflictError("Отзыв можно оставить только на принятое свидание")
-        if date.starts_at > datetime.now(UTC):
-            raise ConflictError("Свидание ещё не наступило — отзыв можно оставить после него")
+        if date.status != REVIEWABLE_STATUS:
+            raise ConflictError("Отзыв можно оставить только после того, как свидание состоялось")
         if await self.repo.get_by_author(date_id, author_id) is not None:
             raise ConflictError("Вы уже оставили отзыв на это свидание")
         return date
 
     async def list_reviewable_dates(self, user_id: int) -> list[DateEvent]:
         return await self.repo.list_reviewable_dates(user_id)
+
+    async def take_review_reminders(self) -> list[tuple[DateEvent, list[User]]]:
+        """Свидания, по которым пора напомнить об отзыве, и кому — тем, кто его ещё не оставил.
+
+        Напоминание одно на свидание: оно сразу отмечается отправленным.
+        """
+        now = datetime.now(UTC)
+        due: list[tuple[DateEvent, list[User]]] = []
+        for date in await self.repo.list_to_remind(now - REVIEW_REMINDER_MAX_AGE, now - REVIEW_REMINDER_AFTER):
+            date.review_reminder_sent_at = now
+            reviewed = {review.author_id for review in await self.repo.list_for_date(date.id)}
+            users = [user for user in (date.creator, date.invitee) if user.id not in reviewed]
+            if users:
+                due.append((date, users))
+        await self.session.commit()
+        return due
 
     async def list_for_date(self, date_id: UUID) -> list[DateReview]:
         return await self.repo.list_for_date(date_id)

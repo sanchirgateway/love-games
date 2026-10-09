@@ -60,7 +60,7 @@ async def cmd_review(message: Message, session: AsyncSession) -> None:
         return
     dates = await ReviewService(session).list_reviewable_dates(message.from_user.id)
     if not dates:
-        await message.answer("Пока нет прошедших свиданий без отзыва 🙂")
+        await message.answer("Пока нет состоявшихся свиданий без отзыва 🙂")
         return
     user = await UserService(session).get(message.from_user.id)
     await message.answer("О каком свидании оставим отзыв?", reply_markup=pick_date_keyboard(dates, user.timezone))

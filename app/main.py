@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 import uvicorn
 from fastapi import APIRouter, FastAPI, Request
@@ -14,6 +14,7 @@ from app.core.db import engine
 from app.core.errors import AppError
 from app.feature.admin import router as admin_router
 from app.feature.dates import handlers as dates_handlers
+from app.feature.dates import jobs as dates_jobs
 from app.feature.dates import router as dates_router
 from app.feature.reviews import handlers as reviews_handlers
 from app.feature.user import handlers as user_handlers
@@ -30,9 +31,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     dp = create_dispatcher(user_handlers.router, dates_handlers.router, reviews_handlers.router)
     await set_commands(bot)
     polling = asyncio.create_task(dp.start_polling(bot, handle_signals=False))
+    dates_jobs_task = asyncio.create_task(dates_jobs.dates_loop(bot))
 
     yield
 
+    _ = dates_jobs_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await dates_jobs_task
     await dp.stop_polling()
     await polling
     await engine.dispose()

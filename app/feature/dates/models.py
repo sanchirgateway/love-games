@@ -47,6 +47,9 @@ class DateEvent(Base):
         index=True,
     )
 
+    done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # когда отмечено состоявшимся
+    review_reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     remind_two_day_before_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     remind_day_before_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     remind_hours_before_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

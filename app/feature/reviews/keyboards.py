@@ -31,6 +31,14 @@ def pick_date_keyboard(dates: list[DateEvent], tz: str) -> InlineKeyboardMarkup:
     )
 
 
+def review_request_keyboard(date_id: UUID) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✍️ Оставить отзыв", callback_data=ReviewPick(date_id=date_id).pack())]
+        ]
+    )
+
+
 def rating_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[

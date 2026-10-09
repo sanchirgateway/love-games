@@ -1,12 +1,16 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError, ConflictError, ForbiddenError, NotFoundError
 from app.feature.dates.models import DateEvent, DateStatus
+from app.feature.dates.reminders import MAX_OFFSET, Reminder, take_due_reminder
 from app.feature.dates.repository import DateRepository
 from app.feature.user.service import UserService
+
+# Через сколько после начала принятое свидание считается состоявшимся
+DONE_AFTER = timedelta(hours=8)
 
 
 class DateService:
@@ -59,8 +63,51 @@ class DateService:
             raise ConflictError("На это приглашение уже ответили")
 
         date.status = DateStatus.PLANNED if accept else DateStatus.DECLINED
+        if accept:
+            # Напоминания, чьё время уже прошло, не нужны: свидание только что приняли
+            _ = take_due_reminder(date, datetime.now(UTC))
         await self.session.commit()
         return date
+
+    async def get_invite_to_resend(self, date_id: UUID, user_id: int) -> DateEvent:
+        """Свидание, приглашение на которое автор хочет отправить ещё раз."""
+        date = await self.get_for_user(date_id, user_id)
+        if date.created_by != user_id:
+            raise ForbiddenError("Отправить приглашение ещё раз может только автор")
+        if date.status != DateStatus.PROPOSED:
+            raise ConflictError("На это приглашение уже ответили")
+        return date
+
+    async def mark_done(self, date_id: UUID, user_id: int) -> DateEvent:
+        """Участник сам отмечает свидание состоявшимся, не дожидаясь DONE_AFTER."""
+        date = await self.get_for_user(date_id, user_id)
+        if date.status != DateStatus.PLANNED:
+            raise ConflictError("Отметить состоявшимся можно только принятое свидание")
+        now = datetime.now(UTC)
+        if date.starts_at > now:
+            raise ConflictError("Свидание ещё не началось")
+        date.status = DateStatus.DONE
+        date.done_at = now
+        await self.session.commit()
+        return date
+
+    async def complete_past(self) -> list[DateEvent]:
+        """Отмечает состоявшимися принятые свидания, с начала которых прошло DONE_AFTER."""
+        date_ids = await self.repo.mark_done_started_before(datetime.now(UTC) - DONE_AFTER)
+        await self.session.commit()
+        return await self.repo.list_by_ids(date_ids) if date_ids else []
+
+    async def take_due_reminders(self) -> list[tuple[DateEvent, Reminder]]:
+        """Свидания, по которым пора напомнить. Напоминания сразу отмечаются отправленными."""
+        now = datetime.now(UTC)
+        due: list[tuple[DateEvent, Reminder]] = []
+        for date in await self.repo.list_to_remind(now, now + MAX_OFFSET):
+            reminder = take_due_reminder(date, now)
+            if reminder is not None:
+                due.append((date, reminder))
+        # Отмечаем до отправки: лучше в редком случае потерять напоминание, чем прислать его дважды
+        await self.session.commit()
+        return due
 
     async def get_for_user(self, date_id: UUID, user_id: int) -> DateEvent:
         date = await self.repo.get(date_id)

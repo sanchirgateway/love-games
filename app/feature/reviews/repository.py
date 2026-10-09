@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import exists, or_, select
@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.feature.dates.models import DateEvent, DateStatus
 from app.feature.reviews.models import DateReview
 
-# Отзыв можно оставить на принятое свидание, время которого уже наступило
-REVIEWABLE_STATUSES = (DateStatus.PLANNED, DateStatus.DONE)
+# Отзыв можно оставить только на состоявшееся свидание
+REVIEWABLE_STATUS = DateStatus.DONE
 
 
 class ReviewRepository:
@@ -36,18 +36,28 @@ class ReviewRepository:
         return list(result)
 
     async def list_reviewable_dates(self, user_id: int, limit: int = 10) -> list[DateEvent]:
-        """Прошедшие свидания пользователя, на которые он ещё не оставил отзыв (свежие первыми)."""
+        """Состоявшиеся свидания пользователя, на которые он ещё не оставил отзыв (свежие первыми)."""
         already_reviewed = exists().where(DateReview.date_id == DateEvent.id, DateReview.author_id == user_id)
         stmt = (
             select(DateEvent)
             .where(
                 or_(DateEvent.created_by == user_id, DateEvent.invitee_id == user_id),
-                DateEvent.status.in_(REVIEWABLE_STATUSES),
-                DateEvent.starts_at <= datetime.now(UTC),
+                DateEvent.status == REVIEWABLE_STATUS,
                 ~already_reviewed,
             )
             .order_by(DateEvent.starts_at.desc())
             .limit(limit)
+        )
+        result = await self.session.scalars(stmt)
+        return list(result)
+
+    async def list_to_remind(self, done_from: datetime, done_to: datetime) -> list[DateEvent]:
+        """Состоявшиеся между done_from и done_to свидания, по которым ещё не напоминали об отзыве."""
+        stmt = select(DateEvent).where(
+            DateEvent.status == REVIEWABLE_STATUS,
+            DateEvent.done_at >= done_from,
+            DateEvent.done_at <= done_to,
+            DateEvent.review_reminder_sent_at.is_(None),
         )
         result = await self.session.scalars(stmt)
         return list(result)
