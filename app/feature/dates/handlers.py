@@ -8,7 +8,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InaccessibleMessage, InlineKeyboardMarkup, Message, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.time import parse_local_datetime
+from app.core.time import format_local, parse_local_datetime
 from app.feature.dates import notify
 from app.feature.dates.keyboards import (
     DateAnswer,
@@ -26,7 +26,7 @@ from app.feature.dates.keyboards import (
 from app.feature.dates.models import DateEvent, DateStatus
 from app.feature.dates.service import DateService
 from app.feature.reviews import notify as review_notify
-from app.feature.reviews.service import ReviewService, can_review
+from app.feature.reviews.service import ReviewService, can_review, can_see_review, reviews_reveal_at
 from app.feature.user.service import UserService
 
 router = Router()
@@ -160,13 +160,21 @@ async def _date_card(session: AsyncSession, date: DateEvent, user_id: int) -> tu
     viewer = date.creator if date.created_by == user_id else date.invitee
     icon, label = status_label(date)
     parts = [notify.describe(date, viewer), f"{icon} {label}"]
+    visible = [review for review in reviews if can_see_review(date, reviews, review, user_id)]
     for review in reviews:
         author = date.creator if review.author_id == date.created_by else date.invitee
+        if review not in visible:
+            reveal_at = format_local(reviews_reveal_at(date), viewer.timezone)
+            parts.append(
+                f"<b>🔒 Отзыв от {escape(author.first_name)}</b>\n"
+                f"Откроется, когда оставите свой, или {reveal_at}"
+            )
+            continue
         title = "Ваш отзыв" if review.author_id == user_id else f"Отзыв от {escape(author.first_name)}"
         photos = f"\n📷 {len(review.photos)} фото" if review.photos else ""
         parts.append(f"<b>{title}</b>\n{review_notify.describe(review, REVIEW_FIELD_PREVIEW)}{photos}")
 
-    photos_count = sum(len(review.photos) for review in reviews)
+    photos_count = sum(len(review.photos) for review in visible)
     keyboard = date_detail_keyboard(
         date.id,
         can_review(date, reviews, user_id),
@@ -216,7 +224,12 @@ async def mark_date_done(callback: CallbackQuery, callback_data: DateDone, sessi
 async def date_photos(callback: CallbackQuery, callback_data: DatePhotos, session: AsyncSession, bot: Bot) -> None:
     user_id = callback.from_user.id
     date = await DateService(session).get_for_user(callback_data.date_id, user_id)  # проверка доступа
-    reviews = [review for review in await ReviewService(session).list_for_date(date.id) if review.photos]
+    all_reviews = await ReviewService(session).list_for_date(date.id)
+    reviews = [
+        review
+        for review in all_reviews
+        if review.photos and can_see_review(date, all_reviews, review, user_id)
+    ]
     if not reviews:
         _ = await callback.answer("Фото пока нет", show_alert=True)
         return

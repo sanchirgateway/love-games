@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from html import escape
 from uuid import UUID
 
@@ -19,7 +20,7 @@ from app.feature.reviews.keyboards import (
     rating_keyboard,
 )
 from app.feature.reviews.models import MAX_REVIEW_PHOTOS
-from app.feature.reviews.service import NewPhoto, ReviewService
+from app.feature.reviews.service import NewPhoto, ReviewService, reviews_reveal_at
 from app.feature.user.service import UserService
 
 router = Router()
@@ -160,10 +161,26 @@ async def review_done(message: Message, state: FSMContext, session: AsyncSession
     await state.clear()
 
     date = await DateService(session).get_for_user(review.date_id, message.from_user.id)
-    await notify.send_review(bot, review, date)
+    reviews = await ReviewService(session).list_for_date(date.id)
+    partner_review = next((other for other in reviews if other.author_id != review.author_id), None)
+    partner = date.invitee if review.author_id == date.created_by else date.creator
+    revealed = datetime.now(UTC) >= reviews_reveal_at(date)
+
+    if partner_review is None and not revealed:
+        note = f"🔒 {escape(partner.first_name)} увидит его, когда напишет свой — тогда откроется и отзыв для вас"
+    else:
+        note = f"Ваш отзыв отправлен {escape(partner.first_name)}"
     await message.answer(
-        f"Спасибо! Отзыв сохранён 💝\n\n{notify.describe(review)}", reply_markup=ReplyKeyboardRemove()
+        f"Спасибо! Отзыв сохранён 💝\n\n{notify.describe(review)}\n\n{note}", reply_markup=ReplyKeyboardRemove()
     )
+
+    if partner_review is None and not revealed:
+        await notify.send_review_teaser(bot, review, date)
+    else:
+        await notify.send_review(bot, review, date)
+    if partner_review is not None:
+        # Оба отзыва есть — открываем автору отзыв партнёра
+        await notify.send_review(bot, partner_review, date)
 
 
 @router.message(ReviewForm.photos)

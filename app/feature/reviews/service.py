@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 REVIEW_REMINDER_AFTER = timedelta(days=1)
 # О давних свиданиях не напоминаем: после простоя бота такие напоминания пришли бы пачкой
 REVIEW_REMINDER_MAX_AGE = timedelta(days=2)
+# Отзыв партнёра скрыт, пока не напишешь свой. Если так и не написал — откроется через это время
+REVIEWS_REVEAL_AFTER = timedelta(days=7)
 
 
 @dataclass(frozen=True)
@@ -34,6 +36,20 @@ def can_review(date: DateEvent, reviews: list[DateReview], user_id: int) -> bool
     return (
         date.status == REVIEWABLE_STATUS
         and all(review.author_id != user_id for review in reviews)
+    )
+
+
+def reviews_reveal_at(date: DateEvent) -> datetime:
+    """Когда отзывы открываются всем, даже тем, кто свой не написал."""
+    return (date.done_at or date.starts_at) + REVIEWS_REVEAL_AFTER
+
+
+def can_see_review(date: DateEvent, reviews: list[DateReview], review: DateReview, user_id: int) -> bool:
+    """Отзыв партнёра виден, только если пользователь оставил свой или прошло REVIEWS_REVEAL_AFTER."""
+    return (
+        review.author_id == user_id
+        or any(other.author_id == user_id for other in reviews)
+        or datetime.now(UTC) >= reviews_reveal_at(date)
     )
 
 

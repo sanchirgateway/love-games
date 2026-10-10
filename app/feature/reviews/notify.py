@@ -53,6 +53,16 @@ async def send_marked_done(bot: Bot, date: DateEvent, author: User, partner: Use
     await _ask_review(bot, date, partner, text)
 
 
+async def send_review_teaser(bot: Bot, review: DateReview, date: DateEvent) -> None:
+    """Сообщает партнёру, что отзыв есть, но не показывает его: откроется, когда партнёр напишет свой."""
+    author, partner = (date.creator, date.invitee) if review.author_id == date.created_by else (date.invitee, date.creator)
+    text = (
+        f"💬 {escape(author.first_name)} оставил(а) отзыв о свидании «{escape(date.title)}»\n\n"
+        "🔒 Напишите свой — и отзывы откроются вам обоим"
+    )
+    await _ask_review(bot, date, partner, text)
+
+
 async def send_review_reminder(bot: Bot, date: DateEvent, user: User) -> None:
     text = (
         f"🙂 Вы ещё не рассказали, как прошло свидание «{escape(date.title)}»\n\n"
