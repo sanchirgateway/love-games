@@ -93,7 +93,7 @@ class DateService:
 
     async def complete_past(self) -> list[DateEvent]:
         """Отмечает состоявшимися принятые свидания, с начала которых прошло DONE_AFTER."""
-        date_ids = await self.repo.mark_done_started_before(datetime.now(UTC) - DONE_AFTER)
+        date_ids = await self.repo.mark_done_after(datetime.now(UTC), DONE_AFTER)
         await self.session.commit()
         return await self.repo.list_by_ids(date_ids) if date_ids else []
 

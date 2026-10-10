@@ -1,7 +1,7 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.feature.dates.models import DateEvent, DateStatus
@@ -49,12 +49,16 @@ class DateRepository:
         result = await self.session.scalars(stmt)
         return list(result)
 
-    async def mark_done_started_before(self, cutoff: datetime) -> list[UUID]:
-        """Переводит принятые свидания, начавшиеся до cutoff, в «состоялось». Возвращает их id."""
+    async def mark_done_after(self, now: datetime, done_after: timedelta) -> list[UUID]:
+        """Переводит в «состоялось» принятые свидания, с начала которых прошло done_after. Возвращает их id.
+
+        done_at — момент, когда свидание должно было стать состоявшимся, а не время запуска задачи:
+        иначе после простоя старые свидания выглядели бы свежими (и по ним пошли бы напоминания об отзыве).
+        """
         stmt = (
             update(DateEvent)
-            .where(DateEvent.status == DateStatus.PLANNED, DateEvent.starts_at <= cutoff)
-            .values(status=DateStatus.DONE, done_at=func.now())
+            .where(DateEvent.status == DateStatus.PLANNED, DateEvent.starts_at <= now - done_after)
+            .values(status=DateStatus.DONE, done_at=DateEvent.starts_at + done_after)
             .returning(DateEvent.id)
             .execution_options(synchronize_session=False)
         )
