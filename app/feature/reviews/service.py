@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import storage
-from app.core.errors import AppError, ConflictError
+from app.core.errors import AppError, ConflictError, NotFoundError
 from app.feature.dates.models import DateEvent
 from app.feature.dates.service import DateService
 from app.feature.reviews.models import MAX_REVIEW_PHOTOS, DateReview, DateReviewPhoto
@@ -23,12 +23,28 @@ REVIEW_REMINDER_MAX_AGE = timedelta(days=2)
 # Отзыв партнёра скрыт, пока не напишешь свой. Если так и не написал — откроется через это время
 REVIEWS_REVEAL_AFTER = timedelta(days=7)
 
+# Форматы, которые Telegram принимает как фото: сигнатура файла -> (content_type, расширение)
+PHOTO_FORMATS = {
+    b"\xff\xd8\xff": ("image/jpeg", "jpg"),
+    b"\x89PNG\r\n\x1a\n": ("image/png", "png"),
+}
+MAX_PHOTO_SIZE = 10 * 1024 * 1024  # лимит Telegram на фото
+
 
 @dataclass(frozen=True)
 class NewPhoto:
     data: bytes
     content_type: str
-    tg_file_id: str
+    tg_file_id: str | None = None
+
+
+def detect_photo_type(data: bytes) -> str | None:
+    """content_type по содержимому файла (заявленному клиентом типу не верим) или None, если формат не поддержан."""
+    return next((content_type for magic, (content_type, _) in PHOTO_FORMATS.items() if data.startswith(magic)), None)
+
+
+def _photo_extension(content_type: str) -> str:
+    return next((ext for ct, ext in PHOTO_FORMATS.values() if ct == content_type), "jpg")
 
 
 def can_review(date: DateEvent, reviews: list[DateReview], user_id: int) -> bool:
@@ -90,6 +106,19 @@ class ReviewService:
     async def list_for_date(self, date_id: UUID) -> list[DateReview]:
         return await self.repo.list_for_date(date_id)
 
+    async def get_photo(self, photo_id: UUID, user_id: int) -> DateReviewPhoto:
+        """Фото отзыва, если пользователь участник свидания и отзыв ему уже открыт."""
+        photo = await self.repo.get_photo(photo_id)
+        if photo is None:
+            raise NotFoundError("Фото не найдено")
+        review = await self.repo.get(photo.review_id)
+        if review is None:
+            raise NotFoundError("Фото не найдено")
+        date = await self.dates.get_for_user(review.date_id, user_id)
+        if not can_see_review(date, await self.repo.list_for_date(date.id), review, user_id):
+            raise NotFoundError("Фото не найдено")
+        return photo
+
     async def create(
         self,
         date_id: UUID,
@@ -123,7 +152,7 @@ class ReviewService:
         try:
             for position, photo in enumerate(photos):
                 photo_id = uuid4()
-                key = f"reviews/{review.id}/{photo_id}.jpg"
+                key = f"reviews/{review.id}/{photo_id}.{_photo_extension(photo.content_type)}"
                 await storage.upload(key, photo.data, photo.content_type)
                 uploaded.append(key)
                 review.photos.append(

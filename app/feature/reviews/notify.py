@@ -79,6 +79,21 @@ async def _ask_review(bot: Bot, date: DateEvent, user: User, text: str) -> None:
         logger.exception("Не удалось попросить отзыв о свидании %s у пользователя %s", date.id, user.id)
 
 
+async def announce_review(
+    bot: Bot, review: DateReview, date: DateEvent, reviews: list[DateReview], locked: bool
+) -> None:
+    """Рассылает новый отзыв. Партнёру автора — сам отзыв или, если он ему ещё скрыт (locked), только факт.
+    Если партнёр уже оставил свой, его отзыв теперь открывается автору.
+    """
+    if locked:
+        await send_review_teaser(bot, review, date)
+    else:
+        await send_review(bot, review, date)
+    partner_review = next((other for other in reviews if other.author_id != review.author_id), None)
+    if partner_review is not None:
+        await send_review(bot, partner_review, date)
+
+
 async def send_review(bot: Bot, review: DateReview, date: DateEvent) -> None:
     """Показывает отзыв партнёру автора."""
     author, partner = (date.creator, date.invitee) if review.author_id == date.created_by else (date.invitee, date.creator)
@@ -97,15 +112,20 @@ async def send_photos(bot: Bot, chat_id: int, review: DateReview, caption: str |
     """Отправляет фото отзыва альбомом. Подпись (HTML) ставится на первое фото."""
     if not review.photos:
         return
-    try:
-        # По file_id Telegram отправляет мгновенно, без скачивания из хранилища
-        files: list[str | BufferedInputFile] = [p.tg_file_id for p in review.photos]
-        _ = await bot.send_media_group(chat_id, _album(files, caption))
-    except TelegramBadRequest:
-        # file_id перестал работать (например, сменился бот) — берём оригиналы из хранилища
-        logger.warning("file_id фото отзыва %s недоступны, отправляю из хранилища", review.id)
-        files = [BufferedInputFile(await storage.download(p.key), filename=f"{p.id}.jpg") for p in review.photos]
-        _ = await bot.send_media_group(chat_id, _album(files, caption))
+    # По file_id Telegram отправляет мгновенно, без скачивания из хранилища.
+    # У фото, загруженных через Mini App, file_id нет — их сразу берём из хранилища
+    file_ids = [p.tg_file_id for p in review.photos if p.tg_file_id]
+    if len(file_ids) == len(review.photos):
+        try:
+            _ = await bot.send_media_group(chat_id, _album(list(file_ids), caption))
+            return
+        except TelegramBadRequest:
+            # file_id перестал работать (например, сменился бот) — берём оригиналы из хранилища
+            logger.warning("file_id фото отзыва %s недоступны, отправляю из хранилища", review.id)
+    files: list[str | BufferedInputFile] = [
+        BufferedInputFile(await storage.download(p.key), filename=p.key.rsplit("/", 1)[-1]) for p in review.photos
+    ]
+    _ = await bot.send_media_group(chat_id, _album(files, caption))
 
 
 def _album(files: list[str | BufferedInputFile], caption: str | None) -> list[MediaUnion]:

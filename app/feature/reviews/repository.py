@@ -5,7 +5,7 @@ from sqlalchemy import exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.feature.dates.models import DateEvent, DateStatus
-from app.feature.reviews.models import DateReview
+from app.feature.reviews.models import DateReview, DateReviewPhoto
 
 # Отзыв можно оставить только на состоявшееся свидание
 REVIEWABLE_STATUS = DateStatus.DONE
@@ -18,7 +18,14 @@ class ReviewRepository:
     async def create(self, review: DateReview) -> DateReview:
         self.session.add(review)
         await self.session.flush()
+        await self.session.refresh(review, ["created_at", "updated_at"])  # server_default, нужны для ответа API
         return review
+
+    async def get(self, review_id: UUID) -> DateReview | None:
+        return await self.session.get(DateReview, review_id)
+
+    async def get_photo(self, photo_id: UUID) -> DateReviewPhoto | None:
+        return await self.session.get(DateReviewPhoto, photo_id)
 
     async def get_by_author(self, date_id: UUID, author_id: int) -> DateReview | None:
         stmt = select(DateReview).where(DateReview.date_id == date_id, DateReview.author_id == author_id)

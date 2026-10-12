@@ -1,4 +1,3 @@
-from datetime import UTC, datetime
 from html import escape
 from uuid import UUID
 
@@ -19,8 +18,8 @@ from app.feature.reviews.keyboards import (
     pick_date_keyboard,
     rating_keyboard,
 )
-from app.feature.reviews.models import MAX_REVIEW_PHOTOS
-from app.feature.reviews.service import NewPhoto, ReviewService, reviews_reveal_at
+from app.feature.reviews.models import MAX_REVIEW_PHOTOS, MAX_REVIEW_TEXT_LENGTH
+from app.feature.reviews.service import NewPhoto, ReviewService, can_see_review
 from app.feature.user.service import UserService
 
 router = Router()
@@ -28,7 +27,6 @@ router = Router()
 # Обычный текст, не команда — чтобы /cancel и другие команды не попадали в ответы диалога
 plain_text = F.text & ~F.text.startswith("/")
 
-MAX_TEXT_LENGTH = 2000
 SKIP_HINT = "Напишите ответ или «-», чтобы пропустить"
 
 
@@ -98,7 +96,7 @@ async def review_rating(callback: CallbackQuery, callback_data: ReviewRating, st
 async def review_text(message: Message, state: FSMContext) -> None:
     field, next_state, question = TEXT_STEPS[await state.get_state()]
     text = (message.text or "").strip()
-    await state.update_data({field: None if text == "-" else text[:MAX_TEXT_LENGTH]})
+    await state.update_data({field: None if text == "-" else text[:MAX_REVIEW_TEXT_LENGTH]})
     await state.set_state(next_state)
 
     if next_state == ReviewForm.photos:
@@ -162,25 +160,17 @@ async def review_done(message: Message, state: FSMContext, session: AsyncSession
 
     date = await DateService(session).get_for_user(review.date_id, message.from_user.id)
     reviews = await ReviewService(session).list_for_date(date.id)
-    partner_review = next((other for other in reviews if other.author_id != review.author_id), None)
     partner = date.invitee if review.author_id == date.created_by else date.creator
-    revealed = datetime.now(UTC) >= reviews_reveal_at(date)
+    locked = not can_see_review(date, reviews, review, partner.id)
 
-    if partner_review is None and not revealed:
+    if locked:
         note = f"🔒 {escape(partner.first_name)} увидит его, когда напишет свой — тогда откроется и отзыв для вас"
     else:
         note = f"Ваш отзыв отправлен {escape(partner.first_name)}"
     await message.answer(
         f"Спасибо! Отзыв сохранён 💝\n\n{notify.describe(review)}\n\n{note}", reply_markup=ReplyKeyboardRemove()
     )
-
-    if partner_review is None and not revealed:
-        await notify.send_review_teaser(bot, review, date)
-    else:
-        await notify.send_review(bot, review, date)
-    if partner_review is not None:
-        # Оба отзыва есть — открываем автору отзыв партнёра
-        await notify.send_review(bot, partner_review, date)
+    await notify.announce_review(bot, review, date, reviews, locked)
 
 
 @router.message(ReviewForm.photos)

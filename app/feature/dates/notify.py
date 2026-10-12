@@ -10,7 +10,9 @@ from app.core.time import format_local
 from app.feature.dates.keyboards import invite_keyboard
 from app.feature.dates.models import DateEvent, DateStatus
 from app.feature.dates.reminders import Reminder
+from app.feature.user.keyboards import open_app_keyboard
 from app.feature.user.models import User
+from config.config import bot_settings
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +33,21 @@ async def send_invite(bot: Bot, date: DateEvent) -> bool:
     """Отправляет приглашение. False — не дошло (например, партнёр заблокировал бота)."""
     text = f"💐 {escape(date.creator.first_name)} приглашает на свидание\n\n{describe(date, date.invitee)}"
     return await _safe_send(bot, date.invitee.id, text, date)
+
+
+async def send_app_invite(bot: Bot, date: DateEvent) -> bool:
+    """Приглашение, созданное в Mini App: в чат бота — только уведомление, ответ даётся в приложении."""
+    text = (
+        f"💐 {escape(date.creator.first_name)} приглашает вас на свидание «{escape(date.title)}»\n\n"
+        "Откройте Bloomy, чтобы посмотреть детали и ответить"
+    )
+    reply_markup = open_app_keyboard(bot_settings.webapp_url) if bot_settings.webapp_url else None
+    try:
+        _ = await bot.send_message(date.invitee.id, text, reply_markup=reply_markup)
+    except TelegramAPIError:
+        logger.exception("Не удалось отправить уведомление о свидании %s пользователю %s", date.id, date.invitee.id)
+        return False
+    return True
 
 
 async def send_answer(bot: Bot, date: DateEvent) -> None:

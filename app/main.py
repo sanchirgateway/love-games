@@ -17,6 +17,7 @@ from app.feature.dates import handlers as dates_handlers
 from app.feature.dates import jobs as dates_jobs
 from app.feature.dates import router as dates_router
 from app.feature.reviews import handlers as reviews_handlers
+from app.feature.reviews import router as reviews_router
 from app.feature.user import handlers as user_handlers
 from app.feature.user import router as user_router
 from config.config import app_settings
@@ -70,6 +71,7 @@ def create_app() -> FastAPI:
     api.include_router(health.router)
     api.include_router(user_router.router)
     api.include_router(dates_router.router)
+    api.include_router(reviews_router.router)
     api.include_router(admin_router.router)
     app.include_router(api)
 

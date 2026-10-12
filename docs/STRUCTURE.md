@@ -1,11 +1,12 @@
 # Структура проекта
 
-Bloomy — Telegram-бот и Mini App для планирования свиданий. Бот (aiogram) и REST API (FastAPI) работают в одном процессе, данные хранятся в PostgreSQL, фронт Mini App — отдельная статика.
+Bloomy — Telegram-бот и Mini App для планирования свиданий. Бот (aiogram) и REST API (FastAPI) работают в одном процессе: бот запускается polling'ом в `lifespan` FastAPI, рядом крутится фоновая задача напоминаний. Данные хранятся в PostgreSQL, фото отзывов — в SeaweedFS (S3 API). Фронт Mini App — отдельный проект, в этом репозитории его нет.
 
 ```
-Telegram ──► Бот (aiogram) ──┐
-                             ├──► services ──► PostgreSQL
-Mini App (webapp/) ──► API (FastAPI) ──┘
+Telegram ──► handlers (aiogram) ──┐
+                                  ├──► service ──► repository ──► PostgreSQL
+Mini App ──► router (FastAPI) ────┤        └──► core/storage ──► SeaweedFS
+jobs (фон, раз в минуту) ─────────┘
 ```
 
 ## Дерево
@@ -13,130 +14,142 @@ Mini App (webapp/) ──► API (FastAPI) ──┘
 ```
 bloomy_bot/
 ├── app/
-│   ├── __init__.py
-│   ├── main.py                 # сборка FastAPI + запуск бота в lifespan
+│   ├── main.py                 # сборка FastAPI, запуск бота и фоновой задачи в lifespan
 │   │
-│   ├── bot/                    # всё, что касается Telegram-бота
-│   │   ├── __init__.py
-│   │   ├── setup.py            # создание Bot и Dispatcher, подключение роутеров
-│   │   ├── handlers/           # хендлеры команд и колбэков (/start, ...)
-│   │   │   ├── __init__.py
-│   │   │   └── start.py
-│   │   ├── keyboards.py        # inline-клавиатуры, кнопка открытия Mini App
-│   │   └── middlewares.py      # сессия БД, вайтлист пользователей
+│   ├── core/                   # общая инфраструктура, не знает про фичи
+│   │   ├── api.py              # FastAPI-зависимости: SessionDep, BotDep
+│   │   ├── bot.py              # Bot, Dispatcher, middleware сессии БД, список команд, обработка AppError
+│   │   ├── db.py               # Base, async engine, session_maker
+│   │   ├── errors.py           # AppError и наследники (NotFound / Forbidden / Conflict)
+│   │   ├── health.py           # GET /health
+│   │   ├── storage.py          # загрузка / скачивание / удаление файлов в S3
+│   │   └── time.py             # разбор и форматирование дат в часовом поясе пользователя
 │   │
-│   ├── api/                    # REST API для Mini App
-│   │   ├── __init__.py
-│   │   ├── deps.py             # зависимости: сессия БД, текущий пользователь
-│   │   ├── auth.py             # проверка Telegram initData
-│   │   └── routes/
-│   │       ├── __init__.py
-│   │       ├── dates.py        # /api/v1/dates
-│   │       └── users.py        # /api/v1/me
+│   ├── feature/                # фичи, каждая — отдельная папка
+│   │   ├── __init__.py         # импорт всех моделей (для Alembic и связей)
+│   │   ├── user/               # регистрация, пара, авторизация Mini App
+│   │   ├── dates/              # свидания, напоминания, фоновые задачи
+│   │   ├── reviews/            # отзывы и фото
+│   │   └── admin/              # админ-API по X-API-Key
 │   │
-│   ├── schemas/                # Pydantic-схемы запросов и ответов API
-│   │   ├── __init__.py
-│   │   └── dates.py
-│   │
-│   ├── services/               # бизнес-логика, не зависит от бота и API
-│   │   ├── __init__.py
-│   │   ├── dates.py            # создать / изменить / список свиданий
-│   │   ├── users.py            # upsert пользователя из Telegram
-│   │   └── reminders.py        # фоновая задача напоминаний
-│   │
-│   └── db/
-│       ├── __init__.py
-│       ├── base.py             # DeclarativeBase
-│       ├── models.py           # модели SQLAlchemy (User, DateEvent)
-│       └── session.py          # async engine и sessionmaker
+│   └── scripts/
+│       └── set_avatar.py       # разовая установка аватарки бота
 │
 ├── config/
-│   └── config.py               # настройки из .env.dev (pydantic-settings)
+│   └── config.py               # настройки из env / .env.dev (DB_, BOT_, APP_, S3_)
 │
-├── migrations/                 # Alembic
-│   ├── env.py                  # берёт URL из config, metadata из app.db
-│   ├── script.py.mako
-│   └── versions/               # файлы миграций (генерируются)
-│
-├── webapp/                     # фронт Mini App (Vite)
-│   ├── index.html
-│   ├── package.json
-│   └── src/
-│       ├── api.ts              # fetch к /api/v1 с заголовком initData
-│       ├── telegram.ts         # обёртка над Telegram.WebApp
-│       └── pages/              # список, форма, карточка свидания
-│
+├── migrations/                 # Alembic, metadata берётся из app.feature
+├── scripts/
+│   └── dev.py                  # запуск uvicorn с автоперезапуском (замена --reload для Windows)
+├── photo/                      # картинки для бота (аватарка)
 ├── docs/
 │   └── STRUCTURE.md            # этот файл
 │
-├── main.py                     # точка входа: запускает uvicorn с app.main
-├── alembic.ini
-├── docker-compose.dev.yml      # Postgres для разработки
+├── docker-compose.dev.yml      # Postgres, SeaweedFS и приложение для разработки
+├── docker-compose.prod.yml     # прод (Coolify)
 ├── Dockerfile
-├── Taskfile.yml                # команды: БД, миграции, запуск
+├── Taskfile.yml                # команды: БД, хранилище, миграции, запуск
+├── alembic.ini
 ├── pyproject.toml
 ├── uv.lock
-├── .env.dev                    # локальные переменные (не в git)
-└── README.md
+└── README.md                   # функционал, настройки, запуск
 ```
 
-## Слои и правила зависимостей
+### Файлы внутри фичи
 
-| Слой | Отвечает за | Может импортировать |
-|---|---|---|
-| `bot/` | Приём апдейтов Telegram, ответы пользователю | `services`, `db.session`, `config` |
-| `api/` | HTTP-эндпоинты для Mini App, авторизация | `services`, `schemas`, `db.session`, `config` |
-| `schemas/` | Форма данных на входе и выходе API | ничего из проекта, кроме enum'ов из `db.models` |
-| `services/` | Логика: правила, запросы к БД | `db`, `config` |
-| `db/` | Модели, движок, сессии | `config` |
-| `config/` | Настройки | ничего из проекта |
+Набор файлов зависит от фичи, но роли у них одинаковые:
 
-Основное правило: **зависимости идут только сверху вниз.** `services` ничего не знает про aiogram и FastAPI, поэтому одну и ту же функцию (например, «создать свидание») вызывают и хендлер бота, и роут API.
+| Файл | Отвечает за |
+|---|---|
+| `models.py` | Модели SQLAlchemy |
+| `repository.py` | Запросы к БД, без бизнес-правил |
+| `service.py` | Бизнес-логика: проверки, смена статусов, коммит. Класс `<Name>Service(session)` |
+| `handlers.py` | Хендлеры бота: команды, FSM-диалоги, колбэки |
+| `keyboards.py` | Inline- и reply-клавиатуры, `CallbackData` |
+| `notify.py` | Отправка сообщений в Telegram; вызывается и из бота, и из API, и из фоновых задач |
+| `router.py` | Эндпоинты FastAPI |
+| `schemas.py` | Pydantic-схемы API |
+| `dependencies.py` | FastAPI-зависимости фичи (`CurrentUser`, `AdminDep`) |
+| `jobs.py`, `reminders.py` | (dates) фоновый цикл и правила напоминаний |
+
+## Правила зависимостей
+
+| Слой | Может импортировать |
+|---|---|
+| `handlers`, `router`, `jobs` | `service`, `notify`, `keyboards`, `schemas`, `core`, `config` |
+| `notify` | `models`, `keyboards`, `core.time`, `core.storage` |
+| `service` | `repository`, `models`, сервисы других фич, `core.errors`, `core.storage` |
+| `repository` | `models` |
+| `core` | `config` |
+| `config` | ничего из проекта |
+
+Основное правило: **зависимости идут сверху вниз.** `service` ничего не знает про aiogram-хендлеры и FastAPI, поэтому одну и ту же функцию (например, `DateService.propose`) вызывают и хендлер бота, и роут API.
+
+Между фичами можно ходить через сервисы: `reviews` использует `DateService`, `dates` — `UserService`.
 
 Чего не делать:
-- писать SQL-запросы прямо в хендлерах и роутах — для этого есть `services`;
-- импортировать `bot` из `api` и наоборот;
-- возвращать из API модели SQLAlchemy напрямую — только через `schemas`.
+- писать SQL прямо в хендлерах, роутах и сервисах — для этого `repository`;
+- импортировать хендлеры из роутов и наоборот;
+- возвращать из API модели SQLAlchemy без `response_model` — только через `schemas`.
+
+## Ошибки
+
+Сервис бросает `AppError` (или `NotFoundError` / `ForbiddenError` / `ConflictError`) с текстом для пользователя.
+- В боте их ловит `on_app_error` в `core/bot.py`: в колбэке — alert, в сообщении — ответ текстом.
+- В API — `app_error_handler` в `main.py`: `{"detail": message}` с `status_code` ошибки.
+
+Поэтому в хендлерах и роутах проверять права и статусы вручную не нужно.
 
 ## Как проходит запрос из Mini App
 
 1. Фронт отправляет `GET /api/v1/dates` с заголовком `Authorization: tma <initData>`.
-2. `api/auth.py` проверяет подпись initData токеном бота и сверяет `user.id` с вайтлистом.
-3. `api/deps.py` выдаёт сессию БД и текущего пользователя.
-4. `api/routes/dates.py` вызывает `services.dates.list_upcoming(session, user_id)`.
-5. Результат превращается в `schemas.dates.DateOut` и уходит в ответ.
+2. `feature/user/dependencies.py` проверяет подпись initData токеном бота и срок (сутки), загружает пользователя.
+3. `core/api.py` выдаёт сессию БД (`SessionDep`) и бота (`BotDep`).
+4. `feature/dates/router.py` вызывает `DateService(session).list_for_user(user.id)`.
+5. Результат сериализуется через `schemas.DateOut`.
+
+## Фоновые задачи
+
+`feature/dates/jobs.py: dates_loop` запускается в `lifespan` и раз в минуту выполняет независимые шаги (падение одного не останавливает остальные):
+1. `send_reminders` — напоминания о свиданиях (правила в `reminders.py`);
+2. `complete_past_dates` — переводит прошедшие свидания в `done` и просит отзыв;
+3. `send_review_reminders` — повторное напоминание об отзыве.
+
+Факт отправки хранится в колонках `*_sent_at` модели `DateEvent`, поэтому после перезапуска ничего не дублируется.
 
 ## Куда что добавлять
 
 | Задача | Где |
 |---|---|
-| Новая таблица или поле | `app/db/models.py` → `task migrate:new -- "описание"` → проверить файл → `task migrate` |
-| Новая команда бота | `app/bot/handlers/<name>.py`, подключить роутер в `bot/setup.py` |
-| Новый эндпоинт | `app/api/routes/<name>.py` + схемы в `app/schemas/`, подключить в `app/main.py` |
-| Новая логика | функция в `app/services/<name>.py` |
-| Новая настройка | поле в `config/config.py` + переменная в `.env.dev` |
+| Новая таблица или поле | `app/feature/<name>/models.py` (новую модель — импортировать в `app/feature/__init__.py`) → `task migrate:new -- "описание"` → проверить файл → `task migrate` |
+| Новая команда бота | хендлер в `app/feature/<name>/handlers.py`, команду — в `BOT_COMMANDS` в `core/bot.py`; новый роутер — в `create_dispatcher(...)` в `main.py` |
+| Новый эндпоинт | `app/feature/<name>/router.py` + схемы в `schemas.py`; новый роутер — в `create_app()` в `main.py` |
+| Новая логика | метод в `app/feature/<name>/service.py` |
+| Новая фоновая задача | шаг в `steps` в `feature/dates/jobs.py` или отдельная задача в `lifespan` |
+| Новая настройка | поле в `config/config.py` + переменная в `.env.dev` и `docker-compose.prod.yml` |
 
 ## Соглашения
 
-- Время в БД хранится в UTC (`DateTime(timezone=True)`), в часовой пояс пользователя переводится только при показе.
-- `users.id` — это Telegram user id (`BigInteger`), отдельного автоинкремента нет.
-- Переменные окружения базы — с префиксом `DB_` (`DB_HOST`, `DB_PORT`, ...).
+- Время в БД хранится в UTC (`DateTime(timezone=True)`), в часовой пояс пользователя (`users.timezone`) переводится только при вводе и показе — через `core/time.py`.
+- `users.id` — это Telegram user id (`BigInteger`), автоинкремента нет. Пара — `users.partner_id`.
+- `dates.id` и `date_reviews.id` — UUID.
+- Фото отзывов лежат в S3 под ключом `reviews/<review_id>/<photo_id>.<jpg|png>`. `tg_file_id` есть только у фото, присланных боту: по нему бот пересылает фото без скачивания. Фото из Mini App (`tg_file_id = NULL`) бот отправляет из хранилища, а API отдаёт их через `GET /reviews/photos/{id}`.
+- Логика рассылки после нового отзыва (`notify.announce_review`) общая для бота и API.
+- Сообщения бота — в HTML (`ParseMode.HTML`), пользовательский текст экранируется через `html.escape`.
+- Апдейты одного чата обрабатываются по очереди (`SimpleEventIsolation`) — иначе фото из альбома теряются в FSM.
+- Переменные окружения сгруппированы по префиксам: `DB_`, `BOT_`, `APP_`, `S3_`.
 - Миграции генерируются Alembic'ом и всегда просматриваются перед `task migrate`.
-- Все `__init__.py` пустые, кроме тех, где собираются роутеры.
 
 ## Команды
 
 ```bash
+task install                     # зависимости
 task db:up                       # поднять Postgres
+task storage:up                  # поднять SeaweedFS и создать bucket
 task migrate:new -- "описание"   # сгенерировать миграцию
 task migrate                     # накатить миграции
 task migrate:status              # текущая ревизия
 task run                         # запустить приложение
 task dev                         # всё вместе
+task up                          # всё в Docker
 ```
-
-## Текущее состояние
-
-Уже есть: `app/db/models.py`, `config/config.py`, `migrations/` с первой миграцией, `docker-compose.dev.yml`, `Taskfile.yml`.
-
-Осталось создать: `app/db/base.py` и `session.py`, `app/bot/`, `app/api/`, `app/schemas/`, `app/services/`, `app/main.py`, `webapp/`.

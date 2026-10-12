@@ -16,6 +16,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.db import Base
 
 MAX_REVIEW_PHOTOS = 10  # столько влезает в один media group при показе
+MAX_REVIEW_TEXT_LENGTH = 2000  # для каждого текстового поля отзыва
 
 
 class DateReview(Base):
@@ -66,7 +67,8 @@ class DateReviewPhoto(Base):
     position: Mapped[int] = mapped_column(SmallInteger)
 
     key: Mapped[str] = mapped_column(Text, unique=True)
-    tg_file_id: Mapped[str] = mapped_column(Text)
+    # file_id в Telegram: есть у фото, присланных боту. У загруженных через Mini App — None
+    tg_file_id: Mapped[str | None] = mapped_column(Text)
     content_type: Mapped[str] = mapped_column(Text)
     size: Mapped[int] = mapped_column(Integer)
 
