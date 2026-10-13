@@ -62,6 +62,10 @@ class DateResend(CallbackData, prefix="date_resend"):
     date_id: UUID
 
 
+class DateCancelStart(CallbackData, prefix="date_cancel"):
+    date_id: UUID
+
+
 def can_resend_invite(date: DateEvent, user_id: int) -> bool:
     """Автор может повторить приглашение, пока на него не ответили (например, если первое не дошло)."""
     return date.status == DateStatus.PROPOSED and date.created_by == user_id
@@ -87,7 +91,12 @@ def dates_list_keyboard(dates: list[DateEvent], tz: str) -> InlineKeyboardMarkup
 
 
 def date_detail_keyboard(
-    date_id: UUID, can_review: bool, photos_count: int, can_mark_done: bool, can_resend_invite: bool
+    date_id: UUID,
+    can_review: bool,
+    photos_count: int,
+    can_mark_done: bool,
+    can_resend_invite: bool,
+    can_cancel: bool,
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     if can_resend_invite:
@@ -113,6 +122,14 @@ def date_detail_keyboard(
     if can_review:
         rows.append(
             [InlineKeyboardButton(text="✍️ Оставить отзыв", callback_data=ReviewPick(date_id=date_id).pack())]
+        )
+    if can_cancel:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🚫 Отменить свидание", callback_data=DateCancelStart(date_id=date_id).pack()
+                )
+            ]
         )
     rows.append([InlineKeyboardButton(text="← Все свидания", callback_data=DateList().pack())])
     return InlineKeyboardMarkup(inline_keyboard=rows)

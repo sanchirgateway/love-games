@@ -50,6 +50,10 @@ class DateEvent(Base):
     done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # когда отмечено состоявшимся
     review_reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    cancel_reason: Mapped[str | None] = mapped_column(Text)
+
     remind_two_day_before_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     remind_day_before_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     remind_hours_before_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

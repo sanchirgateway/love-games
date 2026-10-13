@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from html import escape
+from uuid import UUID
 
 from aiogram import Bot, F, Router
 from aiogram.filters import Command, StateFilter
@@ -12,6 +13,7 @@ from app.core.time import format_local, parse_local_datetime
 from app.feature.dates import notify
 from app.feature.dates.keyboards import (
     DateAnswer,
+    DateCancelStart,
     DateDone,
     DateList,
     DateOpen,
@@ -24,7 +26,7 @@ from app.feature.dates.keyboards import (
     status_label,
 )
 from app.feature.dates.models import DateEvent, DateStatus
-from app.feature.dates.service import DateService
+from app.feature.dates.service import CANCEL_REASON_MAX, DateService, can_cancel
 from app.feature.reviews import notify as review_notify
 from app.feature.reviews.service import ReviewService, can_review, can_see_review, reviews_reveal_at
 from app.feature.user.service import UserService
@@ -39,6 +41,10 @@ class NewDate(StatesGroup):
     title = State()
     starts_at = State()
     place = State()
+
+
+class CancelDate(StatesGroup):
+    reason = State()
 
 
 @router.message(Command("cancel"), StateFilter("*"))
@@ -160,6 +166,8 @@ async def _date_card(session: AsyncSession, date: DateEvent, user_id: int) -> tu
     viewer = date.creator if date.created_by == user_id else date.invitee
     icon, label = status_label(date)
     parts = [notify.describe(date, viewer), f"{icon} {label}"]
+    if date.status == DateStatus.CANCELLED and date.cancel_reason:
+        parts.append(notify.cancelled_note(date))
     visible = [review for review in reviews if can_see_review(date, reviews, review, user_id)]
     for review in reviews:
         author = date.creator if review.author_id == date.created_by else date.invitee
@@ -181,6 +189,7 @@ async def _date_card(session: AsyncSession, date: DateEvent, user_id: int) -> tu
         photos_count,
         can_mark_done(date),
         can_resend_invite(date, user_id),
+        can_cancel(date),
     )
     return "\n\n".join(parts), keyboard
 
@@ -218,6 +227,42 @@ async def mark_date_done(callback: CallbackQuery, callback_data: DateDone, sessi
     if callback.message is not None and not isinstance(callback.message, InaccessibleMessage):
         _ = await callback.message.edit_text(text, reply_markup=keyboard)
     _ = await callback.answer("Отметили 💞 Теперь можно оставить отзыв")
+
+
+@router.callback_query(DateCancelStart.filter())
+async def cancel_date_start(
+    callback: CallbackQuery, callback_data: DateCancelStart, state: FSMContext, session: AsyncSession
+) -> None:
+    date = await DateService(session).get_for_user(callback_data.date_id, callback.from_user.id)
+    if not can_cancel(date):
+        _ = await callback.answer("Это свидание уже нельзя отменить", show_alert=True)
+        return
+    await state.set_state(CancelDate.reason)
+    await state.update_data(date_id=str(date.id))
+    _ = await callback.answer()
+    if callback.message is not None and not isinstance(callback.message, InaccessibleMessage):
+        _ = await callback.message.answer(
+            f"Отменяем «{escape(date.title)}». Напишите, почему — партнёр увидит причину.\n\n"
+            "/cancel — передумали отменять"
+        )
+
+
+@router.message(CancelDate.reason, plain_text)
+async def cancel_date_reason(message: Message, state: FSMContext, session: AsyncSession, bot: Bot) -> None:
+    if message.from_user is None:
+        return
+    reason = (message.text or "").strip()
+    if len(reason) > CANCEL_REASON_MAX:
+        await message.answer(f"Слишком длинно — уложитесь в {CANCEL_REASON_MAX} символов")
+        return
+    data = await state.get_data()
+    await state.clear()
+
+    user_id = message.from_user.id
+    date = await DateService(session).cancel(UUID(str(data["date_id"])), user_id, reason)
+    await notify.send_cancelled(bot, date)
+    text, keyboard = await _date_card(session, date, user_id)
+    await message.answer(f"Свидание отменено, партнёр получит уведомление.\n\n{text}", reply_markup=keyboard)
 
 
 @router.callback_query(DatePhotos.filter())

@@ -5,7 +5,7 @@ from fastapi import APIRouter, status
 from app.core.api import BotDep, SessionDep
 from app.feature.dates import notify
 from app.feature.dates.models import DateEvent
-from app.feature.dates.schemas import DateCreate, DateOut
+from app.feature.dates.schemas import DateCancel, DateCreate, DateOut
 from app.feature.dates.service import DateService
 from app.feature.user.dependencies import CurrentUser
 
@@ -40,4 +40,13 @@ async def accept_date(date_id: UUID, user: CurrentUser, session: SessionDep, bot
 async def decline_date(date_id: UUID, user: CurrentUser, session: SessionDep, bot: BotDep) -> DateEvent:
     date = await DateService(session).respond(date_id, user.id, accept=False)
     await notify.send_answer(bot, date)
+    return date
+
+
+@router.post("/{date_id}/cancel", response_model=DateOut)
+async def cancel_date(
+    date_id: UUID, body: DateCancel, user: CurrentUser, session: SessionDep, bot: BotDep
+) -> DateEvent:
+    date = await DateService(session).cancel(date_id, user.id, body.reason)
+    await notify.send_cancelled(bot, date)
     return date

@@ -11,6 +11,12 @@ from app.feature.user.service import UserService
 
 # Через сколько после начала принятое свидание считается состоявшимся
 DONE_AFTER = timedelta(hours=8)
+CANCEL_REASON_MAX = 500
+
+
+def can_cancel(date: DateEvent) -> bool:
+    """Отменить можно предложенное или принятое свидание, пока оно не началось."""
+    return date.status in (DateStatus.PROPOSED, DateStatus.PLANNED) and date.starts_at > datetime.now(UTC)
 
 
 class DateService:
@@ -88,6 +94,24 @@ class DateService:
             raise ConflictError("Свидание ещё не началось")
         date.status = DateStatus.DONE
         date.done_at = now
+        await self.session.commit()
+        return date
+
+    async def cancel(self, date_id: UUID, user_id: int, reason: str) -> DateEvent:
+        """Любой из участников отменяет свидание, которое ещё не началось, с указанием причины."""
+        reason = reason.strip()
+        if not reason:
+            raise AppError("Напишите, почему отменяете свидание")
+        if len(reason) > CANCEL_REASON_MAX:
+            raise AppError(f"Причина слишком длинная — не больше {CANCEL_REASON_MAX} символов")
+
+        date = await self.get_for_user(date_id, user_id)
+        if not can_cancel(date):
+            raise ConflictError("Отменить можно только предстоящее свидание")
+        date.status = DateStatus.CANCELLED
+        date.cancelled_at = datetime.now(UTC)
+        date.cancelled_by = user_id
+        date.cancel_reason = reason
         await self.session.commit()
         return date
 

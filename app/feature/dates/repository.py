@@ -27,7 +27,11 @@ class DateRepository:
             .order_by(DateEvent.starts_at)
         )
         if upcoming_only:
-            stmt = stmt.where(DateEvent.starts_at >= datetime.now(UTC))
+            # Отклонённые и отменённые свидания не состоятся — в предстоящих им не место
+            stmt = stmt.where(
+                DateEvent.starts_at >= datetime.now(UTC),
+                DateEvent.status.not_in((DateStatus.DECLINED, DateStatus.CANCELLED)),
+            )
         result = await self.session.scalars(stmt)
         return list(result)
 
