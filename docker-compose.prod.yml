@@ -19,14 +19,14 @@ x-app-common: &app-common
     S3_ACCESS_KEY: ${S3_ACCESS_KEY:?}
     S3_SECRET_KEY: ${S3_SECRET_KEY:?}
     S3_BUCKET: ${S3_BUCKET:-photos}
-    APP_DEBUG: "false"
+    APP_DEBUG: 'false'
     APP_ADMIN_API_KEY: ${APP_ADMIN_API_KEY:-}
     APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:?}
   logging: &logging
     driver: json-file
     options:
-      max-size: "10m"
-      max-file: "5"
+      max-size: '10m'
+      max-file: '5'
 
 services:
   db:
@@ -38,11 +38,11 @@ services:
       POSTGRES_DB: ${DB_DATABASE:?}
       TZ: UTC
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
       interval: 10s
       timeout: 3s
       retries: 10
@@ -57,7 +57,7 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY:?}
     # Ключи S3 задаются только через JSON-конфиг, поэтому генерируем его из env при старте.
     # weed server в одном процессе поднимает master, volume, filer и S3-шлюз.
-    entrypoint: ["/bin/sh", "-c"]
+    entrypoint: ['/bin/sh', '-c']
     command:
       - |
         cat > /tmp/s3.json <<EOF
@@ -68,11 +68,19 @@ services:
         exec weed server -dir=/data -ip.bind=0.0.0.0 -master.volumeSizeLimitMB=1024 -s3 -s3.port=8333 -s3.config=/tmp/s3.json
     # Порты не публикуем: фото отдаёт приложение, S3 доступен только внутри сети compose
     expose:
-      - "8333"
+      - '8333'
     volumes:
       - seaweeddata:/data
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8333/healthz"]
+      test:
+        [
+          'CMD',
+          'wget',
+          '-q',
+          '-O',
+          '/dev/null',
+          'http://127.0.0.1:8333/healthz'
+        ]
       interval: 10s
       timeout: 3s
       retries: 20
@@ -97,7 +105,7 @@ services:
     entrypoint: >
       sh -c "aws --endpoint-url http://seaweedfs:8333 s3api head-bucket --bucket $$S3_BUCKET 2>/dev/null ||
              aws --endpoint-url http://seaweedfs:8333 s3 mb s3://$$S3_BUCKET"
-    restart: "no"
+    restart: 'no'
     logging: *logging
 
   app:
@@ -109,18 +117,23 @@ services:
       SERVICE_FQDN_APP_8000:
     # Миграции перед стартом в том же контейнере: образ собирается один раз
     # (отдельный сервис migrate с build: . собирал его повторно параллельно и упирался в таймаут)
-    command: ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers"]
+    command:
+      [
+        'sh',
+        '-c',
+        'alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers'
+      ]
     restart: unless-stopped
-    expose:
-      - "8000"
+    ports:
+      - '8001:8000'
     healthcheck:
       # В alpine-образе нет curl — проверяем средствами Python
       test:
         [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)",
+          'CMD',
+          'python',
+          '-c',
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"
         ]
       interval: 15s
       timeout: 5s
