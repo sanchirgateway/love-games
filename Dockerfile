@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 # ---------- Сборка: ставим зависимости в .venv ----------
 FROM python:3.13-alpine AS builder
 
