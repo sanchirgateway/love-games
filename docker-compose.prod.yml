@@ -102,6 +102,11 @@ services:
 
   app:
     <<: *app-common
+    environment:
+      <<: *app-env
+      # Magic-переменная Coolify: генерирует домен для app от wildcard сервера
+      # и проксирует его на порт 8000 контейнера. Домен можно поменять в UI → Domains
+      SERVICE_FQDN_APP_8000:
     # Миграции перед стартом в том же контейнере: образ собирается один раз
     # (отдельный сервис migrate с build: . собирал его повторно параллельно и упирался в таймаут)
     command: ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers"]
