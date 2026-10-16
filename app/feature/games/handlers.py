@@ -163,10 +163,11 @@ async def _ask_when(message: Message, state: FSMContext, game: Game) -> None:
     await state.clear()
     await state.set_state(LogSession.when)
     await state.update_data(game_id=str(game.id))
-    await message.answer(
-        f"«{escape(game.title)}» — когда играли?\n\nНажмите кнопку или напишите дату: <code>12.10</code>",
-        reply_markup=when_keyboard(),
-    )
+    text = f"«{escape(game.title)}» — когда играли?\n\nНажмите кнопку или напишите дату: <code>12.10</code>"
+    if game.has_cover and message.bot is not None:
+        await notify.send_cover(message.bot, message.chat.id, game, caption=text, reply_markup=when_keyboard())
+        return
+    await message.answer(text, reply_markup=when_keyboard())
 
 
 @router.callback_query(PlayedPick.filter())

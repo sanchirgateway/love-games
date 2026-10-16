@@ -79,19 +79,25 @@ async def announce_review(
         await _safe_send(bot, author.id, text)
 
 
-async def send_cover(bot: Bot, chat_id: int, game: Game) -> None:
+async def send_cover(
+    bot: Bot,
+    chat_id: int,
+    game: Game,
+    caption: str | None = None,
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> None:
     if game.cover_key is None:
         return
-    caption = f"🖼 {escape(game.title)}"
+    caption = caption or f"🖼 {escape(game.title)}"
     # По file_id Telegram отправляет мгновенно; у обложек из Mini App его нет — берём из хранилища
     if game.cover_tg_file_id:
         try:
-            _ = await bot.send_photo(chat_id, game.cover_tg_file_id, caption=caption)
+            _ = await bot.send_photo(chat_id, game.cover_tg_file_id, caption=caption, reply_markup=reply_markup)
             return
         except TelegramBadRequest:
             logger.warning("file_id обложки игры %s недоступен, отправляю из хранилища", game.id)
     photo = BufferedInputFile(await storage.download(game.cover_key), filename="cover.jpg")
-    _ = await bot.send_photo(chat_id, photo, caption=caption)
+    _ = await bot.send_photo(chat_id, photo, caption=caption, reply_markup=reply_markup)
 
 
 async def _safe_send(bot: Bot, chat_id: int, text: str, reply_markup: InlineKeyboardMarkup | None = None) -> None:
