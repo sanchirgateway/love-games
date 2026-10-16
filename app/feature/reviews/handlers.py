@@ -1,3 +1,4 @@
+import logging
 from html import escape
 from uuid import UUID
 
@@ -19,8 +20,17 @@ from app.feature.reviews.keyboards import (
     rating_keyboard,
 )
 from app.feature.reviews.models import MAX_REVIEW_PHOTOS, MAX_REVIEW_TEXT_LENGTH
-from app.feature.reviews.service import NewPhoto, ReviewService, can_see_review
+from app.feature.reviews.service import (
+    MAX_VIDEO_SIZE,
+    VIDEO_TYPE,
+    NewPhoto,
+    ReviewService,
+    can_see_review,
+    detect_media_type,
+)
 from app.feature.user.service import UserService
+
+logger = logging.getLogger(__name__)
 
 router = Router()
 
@@ -48,8 +58,9 @@ TEXT_STEPS: dict[str | None, tuple[str, State, str]] = {
 }
 
 PHOTOS_PROMPT = (
-    f"Пришлите фото со свидания — можно альбомом, до {MAX_REVIEW_PHOTOS} штук.\n"
-    f"Когда закончите (или если фото нет), нажмите «{PHOTOS_DONE}»"
+    f"Пришлите фото или видео со свидания — можно альбомом, до {MAX_REVIEW_PHOTOS} штук "
+    f"(видео до {MAX_VIDEO_SIZE // 1024 // 1024} МБ).\n"
+    f"Когда закончите (или если их нет), нажмите «{PHOTOS_DONE}»"
 )
 
 
@@ -105,25 +116,43 @@ async def review_text(message: Message, state: FSMContext) -> None:
         await message.answer(f"{question}\n\n{SKIP_HINT}")
 
 
-@router.message(ReviewForm.photos, F.photo)
+@router.message(ReviewForm.photos, F.photo | F.video)
 async def review_photo(message: Message, state: FSMContext) -> None:
-    if not message.photo:
+    if message.video is not None:
+        # Больше 20 МБ бот скачать не сможет, а не MP4 Telegram не покажет в альбоме — проверяем сразу,
+        # а не при сохранении, чтобы не ронять весь отзыв
+        if (message.video.file_size or 0) > MAX_VIDEO_SIZE:
+            await message.answer(
+                f"Видео больше {MAX_VIDEO_SIZE // 1024 // 1024} МБ — такое бот сохранить не может. "
+                "Пришлите покороче или обрежьте"
+            )
+            return
+        if message.video.mime_type not in (None, VIDEO_TYPE):
+            await message.answer("Видео в этом формате не поддерживается — пришлите MP4")
+            return
+        file_id = message.video.file_id
+    elif message.photo:
+        file_id = message.photo[-1].file_id  # последнее — в максимальном разрешении
+    else:
         return
+
     # Альбом приходит отдельными сообщениями с общим media_group_id; обрабатываются они по очереди
-    # (SimpleEventIsolation в диспетчере), поэтому список фото в FSM не теряет элементы
+    # (SimpleEventIsolation в диспетчере), поэтому список в FSM не теряет элементы
     data = await state.get_data()
     photos: list[str] = data.get("photos", [])
     first_in_group = message.media_group_id is None or message.media_group_id != data.get("media_group_id")
 
     if len(photos) >= MAX_REVIEW_PHOTOS:
         if first_in_group:
-            await message.answer(f"Больше {MAX_REVIEW_PHOTOS} фото добавить нельзя — нажмите «{PHOTOS_DONE}»")
+            await message.answer(
+                f"Больше {MAX_REVIEW_PHOTOS} фото и видео добавить нельзя — нажмите «{PHOTOS_DONE}»"
+            )
         await state.update_data(media_group_id=message.media_group_id)
         return
 
-    photos.append(message.photo[-1].file_id)  # последнее — в максимальном разрешении
+    photos.append(file_id)
     await state.update_data(photos=photos, media_group_id=message.media_group_id)
-    # На альбом отвечаем один раз, а не на каждое фото
+    # На альбом отвечаем один раз, а не на каждый файл
     if first_in_group:
         await message.answer(
             f"📷 Принял. Пришлите ещё или нажмите «{PHOTOS_DONE}»", reply_markup=photos_done_keyboard
@@ -137,13 +166,20 @@ async def review_done(message: Message, state: FSMContext, session: AsyncSession
     data = await state.get_data()
     file_ids: list[str] = data.get("photos", [])
     if file_ids:
-        await message.answer("Сохраняю отзыв и фото…", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Сохраняю отзыв, фото и видео…", reply_markup=ReplyKeyboardRemove())
 
     photos: list[NewPhoto] = []
     for file_id in file_ids:
         file = await bot.download(file_id)
-        if file is not None:
-            photos.append(NewPhoto(data=file.read(), content_type="image/jpeg", tg_file_id=file_id))
+        if file is None:
+            continue
+        content = file.read()
+        # Фото от Telegram всегда JPEG, видео — MP4; тип всё равно берём по содержимому
+        content_type = detect_media_type(content)
+        if content_type is None:
+            logger.warning("Неизвестный формат файла %s в отзыве, пропускаю", file_id)
+            continue
+        photos.append(NewPhoto(data=content, content_type=content_type, tg_file_id=file_id))
 
     review = await ReviewService(session).create(
         date_id=UUID(str(data["date_id"])),
@@ -175,4 +211,4 @@ async def review_done(message: Message, state: FSMContext, session: AsyncSession
 
 @router.message(ReviewForm.photos)
 async def review_photos_other(message: Message) -> None:
-    await message.answer(f"Пришлите фото (именно как фото, не файлом) или нажмите «{PHOTOS_DONE}»")
+    await message.answer(f"Пришлите фото или видео (именно так, не файлом) или нажмите «{PHOTOS_DONE}»")

@@ -18,12 +18,13 @@ from app.feature.reviews.schemas import (
     ReviewOut,
 )
 from app.feature.reviews.service import (
-    MAX_PHOTO_SIZE,
+    MAX_VIDEO_SIZE,
     NewPhoto,
     ReviewService,
     can_review,
     can_see_review,
-    detect_photo_type,
+    detect_media_type,
+    max_media_size,
     reviews_reveal_at,
 )
 from app.feature.user.dependencies import CurrentUser
@@ -43,18 +44,22 @@ def _clean(value: str | None) -> str | None:
 
 async def _read_photos(files: list[UploadFile]) -> list[NewPhoto]:
     if len(files) > MAX_REVIEW_PHOTOS:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Можно прикрепить не больше {MAX_REVIEW_PHOTOS} фото")
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, f"Можно прикрепить не больше {MAX_REVIEW_PHOTOS} фото и видео"
+        )
     photos: list[NewPhoto] = []
     for file in files:
-        data = await file.read(MAX_PHOTO_SIZE + 1)
-        if len(data) > MAX_PHOTO_SIZE:
-            raise HTTPException(
-                status.HTTP_413_CONTENT_TOO_LARGE, f"Фото {file.filename} больше {MAX_PHOTO_SIZE // 1024 // 1024} МБ"
-            )
-        content_type = detect_photo_type(data)
+        # Читаем не больше самого большого лимита: тип известен только после чтения начала файла
+        data = await file.read(MAX_VIDEO_SIZE + 1)
+        content_type = detect_media_type(data)
         if content_type is None:
             raise HTTPException(
-                status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, f"Фото {file.filename}: поддерживаются только JPEG и PNG"
+                status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, f"{file.filename}: поддерживаются только JPEG, PNG и MP4"
+            )
+        max_size = max_media_size(content_type)
+        if len(data) > max_size:
+            raise HTTPException(
+                status.HTTP_413_CONTENT_TOO_LARGE, f"{file.filename} больше {max_size // 1024 // 1024} МБ"
             )
         photos.append(NewPhoto(data=data, content_type=content_type))
     return photos
@@ -90,7 +95,10 @@ async def create_review(
     disliked: ReviewText = None,
     food: ReviewText = None,
     comment: ReviewText = None,
-    photos: Annotated[list[UploadFile] | None, File(description=f"До {MAX_REVIEW_PHOTOS} фото, JPEG или PNG")] = None,
+    photos: Annotated[
+        list[UploadFile] | None,
+        File(description=f"До {MAX_REVIEW_PHOTOS} фото и видео: JPEG или PNG до 10 МБ, MP4 до 20 МБ"),
+    ] = None,
 ) -> ReviewCreated:
     service = ReviewService(session)
     review = await service.create(
@@ -120,7 +128,7 @@ async def create_review(
 @router.get(
     "/reviews/photos/{photo_id}",
     response_class=Response,
-    responses={200: {"content": {"image/jpeg": {}, "image/png": {}}}},
+    responses={200: {"content": {"image/jpeg": {}, "image/png": {}, "video/mp4": {}}}},
 )
 async def get_photo(photo_id: UUID, user: CurrentUser, session: SessionDep) -> Response:
     photo = await ReviewService(session).get_photo(photo_id, user.id)

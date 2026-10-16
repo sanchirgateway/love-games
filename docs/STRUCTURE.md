@@ -1,6 +1,6 @@
 # Структура проекта
 
-Bloomy — Telegram-бот и Mini App для планирования свиданий. Бот (aiogram) и REST API (FastAPI) работают в одном процессе: бот запускается polling'ом в `lifespan` FastAPI, рядом крутится фоновая задача напоминаний. Данные хранятся в PostgreSQL, фото отзывов — в SeaweedFS (S3 API). Фронт Mini App — отдельный проект, в этом репозитории его нет.
+Bloomy — Telegram-бот и Mini App для планирования свиданий. Бот (aiogram) и REST API (FastAPI) работают в одном процессе: бот запускается polling'ом в `lifespan` FastAPI, рядом крутится фоновая задача напоминаний. Данные хранятся в PostgreSQL, фото и видео отзывов — в SeaweedFS (S3 API). Фронт Mini App — отдельный проект, в этом репозитории его нет.
 
 ```
 Telegram ──► handlers (aiogram) ──┐
@@ -22,6 +22,7 @@ bloomy_bot/
 │   │   ├── db.py               # Base, async engine, session_maker
 │   │   ├── errors.py           # AppError и наследники (NotFound / Forbidden / Conflict)
 │   │   ├── health.py           # GET /health
+│   │   ├── images.py           # сжатие фото перед сохранением (Pillow)
 │   │   ├── storage.py          # загрузка / скачивание / удаление файлов в S3
 │   │   └── time.py             # разбор и форматирование дат в часовом поясе пользователя
 │   │
@@ -29,7 +30,7 @@ bloomy_bot/
 │   │   ├── __init__.py         # импорт всех моделей (для Alembic и связей)
 │   │   ├── user/               # регистрация, пара, авторизация Mini App
 │   │   ├── dates/              # свидания, напоминания, фоновые задачи
-│   │   ├── reviews/            # отзывы и фото
+│   │   ├── reviews/            # отзывы, фото и видео
 │   │   └── admin/              # админ-API по X-API-Key
 │   │
 │   └── scripts/
@@ -133,7 +134,7 @@ bloomy_bot/
 - Время в БД хранится в UTC (`DateTime(timezone=True)`), в часовой пояс пользователя (`users.timezone`) переводится только при вводе и показе — через `core/time.py`.
 - `users.id` — это Telegram user id (`BigInteger`), автоинкремента нет. Пара — `users.partner_id`.
 - `dates.id` и `date_reviews.id` — UUID.
-- Фото отзывов лежат в S3 под ключом `reviews/<review_id>/<photo_id>.<jpg|png>`. `tg_file_id` есть только у фото, присланных боту: по нему бот пересылает фото без скачивания. Фото из Mini App (`tg_file_id = NULL`) бот отправляет из хранилища, а API отдаёт их через `GET /reviews/photos/{id}`.
+- Фото и видео отзывов лежат в таблице `date_review_photos` (видео отличается по `content_type = video/mp4`) и в S3 под ключом `reviews/<review_id>/<photo_id>.<jpg|png|mp4>`. `tg_file_id` есть только у файлов, присланных боту: по нему бот пересылает их без скачивания. Видео ограничено 20 МБ — больше бот не может скачать из Telegram. Файлы из Mini App (`tg_file_id = NULL`) бот отправляет из хранилища, а API отдаёт их через `GET /reviews/photos/{id}`.
 - Логика рассылки после нового отзыва (`notify.announce_review`) общая для бота и API.
 - Сообщения бота — в HTML (`ParseMode.HTML`), пользовательский текст экранируется через `html.escape`.
 - Апдейты одного чата обрабатываются по очереди (`SimpleEventIsolation`) — иначе фото из альбома теряются в FSM.

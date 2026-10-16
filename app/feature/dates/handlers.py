@@ -179,7 +179,7 @@ async def _date_card(session: AsyncSession, date: DateEvent, user_id: int) -> tu
             )
             continue
         title = "Ваш отзыв" if review.author_id == user_id else f"Отзыв от {escape(author.first_name)}"
-        photos = f"\n📷 {len(review.photos)} фото" if review.photos else ""
+        photos = f"\n📷 {review_notify.media_summary(review.photos)}" if review.photos else ""
         parts.append(f"<b>{title}</b>\n{review_notify.describe(review, REVIEW_FIELD_PREVIEW)}{photos}")
 
     photos_count = sum(len(review.photos) for review in visible)
@@ -276,12 +276,12 @@ async def date_photos(callback: CallbackQuery, callback_data: DatePhotos, sessio
         if review.photos and can_see_review(date, all_reviews, review, user_id)
     ]
     if not reviews:
-        _ = await callback.answer("Фото пока нет", show_alert=True)
+        _ = await callback.answer("Фото и видео пока нет", show_alert=True)
         return
 
     _ = await callback.answer()
-    # Отдельный альбом на каждый отзыв: в одном media group максимум 10 фото
+    # Отдельный альбом на каждый отзыв: в одном media group максимум 10 файлов
     for review in reviews:
         author = date.creator if review.author_id == date.created_by else date.invitee
-        who = "Ваши фото" if review.author_id == user_id else f"Фото от {escape(author.first_name)}"
+        who = "Ваши фото и видео" if review.author_id == user_id else f"От {escape(author.first_name)}"
         await review_notify.send_photos(bot, user_id, review, caption=f"{who} · «{escape(date.title)}»")

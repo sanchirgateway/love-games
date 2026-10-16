@@ -9,7 +9,7 @@ class ReviewPhotoOut(BaseModel):
 
     id: UUID  # файл: GET /api/v1/reviews/photos/{id}
     position: int
-    content_type: str
+    content_type: str  # image/jpeg, image/png или video/mp4
     size: int
 
 

@@ -15,8 +15,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
 
-MAX_REVIEW_PHOTOS = 10  # столько влезает в один media group при показе
+MAX_REVIEW_PHOTOS = 10  # фото и видео вместе: столько влезает в один media group при показе
 MAX_REVIEW_TEXT_LENGTH = 2000  # для каждого текстового поля отзыва
+
+
+def is_video_type(content_type: str) -> bool:
+    return content_type.startswith("video/")
 
 
 class DateReview(Base):
@@ -53,6 +57,8 @@ class DateReview(Base):
 
 
 class DateReviewPhoto(Base):
+    """Фото или видео отзыва (различаются по content_type). Название осталось с тех пор, когда были только фото."""
+
     __tablename__ = "date_review_photos"
     __table_args__ = (
         UniqueConstraint("review_id", "position", name="uq_date_review_photos_position"),
@@ -75,3 +81,7 @@ class DateReviewPhoto(Base):
     review: Mapped[DateReview] = relationship(back_populates="photos")
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    @property
+    def is_video(self) -> bool:
+        return is_video_type(self.content_type)

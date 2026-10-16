@@ -115,7 +115,7 @@ def date_detail_keyboard(
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"📷 Фото ({photos_count})", callback_data=DatePhotos(date_id=date_id).pack()
+                    text=f"📷 Фото и видео ({photos_count})", callback_data=DatePhotos(date_id=date_id).pack()
                 )
             ]
         )

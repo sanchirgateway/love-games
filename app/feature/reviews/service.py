@@ -6,11 +6,11 @@ from uuid import UUID, uuid4
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core import storage
+from app.core import images, storage
 from app.core.errors import AppError, ConflictError, NotFoundError
 from app.feature.dates.models import DateEvent
 from app.feature.dates.service import DateService
-from app.feature.reviews.models import MAX_REVIEW_PHOTOS, DateReview, DateReviewPhoto
+from app.feature.reviews.models import MAX_REVIEW_PHOTOS, DateReview, DateReviewPhoto, is_video_type
 from app.feature.reviews.repository import REVIEWABLE_STATUS, ReviewRepository
 from app.feature.user.models import User
 
@@ -30,20 +30,53 @@ PHOTO_FORMATS = {
 }
 MAX_PHOTO_SIZE = 10 * 1024 * 1024  # лимит Telegram на фото
 
+# Видео — только MP4: его Telegram показывает в альбоме (MOV ушёл бы документом)
+VIDEO_TYPE = "video/mp4"
+# Бот может скачать из Telegram файл не больше 20 МБ (getFile) — тот же лимит и для Mini App
+MAX_VIDEO_SIZE = 20 * 1024 * 1024
+
 
 @dataclass(frozen=True)
 class NewPhoto:
+    """Фото или видео для отзыва."""
+
     data: bytes
     content_type: str
     tg_file_id: str | None = None
 
 
-def detect_photo_type(data: bytes) -> str | None:
+def detect_media_type(data: bytes) -> str | None:
     """content_type по содержимому файла (заявленному клиентом типу не верим) или None, если формат не поддержан."""
-    return next((content_type for magic, (content_type, _) in PHOTO_FORMATS.items() if data.startswith(magic)), None)
+    photo_type = next((ct for magic, (ct, _) in PHOTO_FORMATS.items() if data.startswith(magic)), None)
+    if photo_type is not None:
+        return photo_type
+    # MP4: с 4-го байта «ftyp», за ним бренд. Бренд «qt  » — это MOV
+    if data[4:8] == b"ftyp" and data[8:12] != b"qt  ":
+        return VIDEO_TYPE
+    return None
 
 
-def _photo_extension(content_type: str) -> str:
+def max_media_size(content_type: str) -> int:
+    return MAX_VIDEO_SIZE if is_video_type(content_type) else MAX_PHOTO_SIZE
+
+
+async def _optimize(photo: NewPhoto) -> NewPhoto:
+    """Сжимает фото из Mini App: там приходят оригиналы с камеры (5–10 МБ, с GPS в EXIF).
+
+    Фото из Telegram уже сжаты и без EXIF — пережатие только ухудшило бы их. Видео не трогаем.
+    """
+    if photo.tg_file_id is not None or is_video_type(photo.content_type):
+        return photo
+    try:
+        data = await images.compress_photo(photo.data)
+    except images.ImageError as e:
+        raise AppError("Не удалось открыть одно из фото — возможно, файл повреждён") from e
+    return NewPhoto(data=data, content_type="image/jpeg")
+
+
+def _media_extension(content_type: str) -> str:
+    if is_video_type(content_type):
+        return "mp4"
     return next((ext for ct, ext in PHOTO_FORMATS.values() if ct == content_type), "jpg")
 
 
@@ -135,8 +168,13 @@ class ReviewService:
         if not 1 <= rating <= 5:
             raise AppError("Оценка должна быть от 1 до 5")
         if len(photos) > MAX_REVIEW_PHOTOS:
-            raise AppError(f"Можно прикрепить не больше {MAX_REVIEW_PHOTOS} фото")
+            raise AppError(f"Можно прикрепить не больше {MAX_REVIEW_PHOTOS} фото и видео")
+        for photo in photos:
+            if len(photo.data) > max_media_size(photo.content_type):
+                kind = "Видео" if is_video_type(photo.content_type) else "Фото"
+                raise AppError(f"{kind} больше {max_media_size(photo.content_type) // 1024 // 1024} МБ")
         _ = await self.check_can_review(date_id, author_id)
+        photos = [await _optimize(photo) for photo in photos]
 
         review = DateReview(
             id=uuid4(),
@@ -152,7 +190,7 @@ class ReviewService:
         try:
             for position, photo in enumerate(photos):
                 photo_id = uuid4()
-                key = f"reviews/{review.id}/{photo_id}.{_photo_extension(photo.content_type)}"
+                key = f"reviews/{review.id}/{photo_id}.{_media_extension(photo.content_type)}"
                 await storage.upload(key, photo.data, photo.content_type)
                 uploaded.append(key)
                 review.photos.append(
