@@ -22,6 +22,8 @@ BOT_COMMANDS = [
     BotCommand(command="dates", description="Мои свидания"),
     BotCommand(command="pair", description="Связаться с партнёром"),
     BotCommand(command="review", description="Оставить отзыв о свидании"),
+    BotCommand(command="played", description="Записать игровой вечер"),
+    BotCommand(command="games", description="Наши игры"),
     BotCommand(command="cancel", description="Отменить текущее действие"),
     BotCommand(command="help", description="Список команд"),
 ]

@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
 MONTHS = [
@@ -31,3 +31,35 @@ def parse_local_datetime(text: str, tz: str) -> datetime | None:
 def format_local(dt: datetime, tz: str) -> str:
     local = dt.astimezone(ZoneInfo(tz))
     return f"{local.day} {MONTHS[local.month - 1]}, {local:%H:%M}"
+
+
+_DATE_RE = re.compile(r"^\s*(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?\s*$")
+
+
+def parse_local_date(text: str, tz: str) -> date | None:
+    """Разбирает «12.10» или «12.10.2026». Без года — ближайшая такая дата в прошлом (для записей задним числом)."""
+    match = _DATE_RE.match(text)
+    if match is None:
+        return None
+    day, month, year = match.groups()
+    today = datetime.now(ZoneInfo(tz)).date()
+    try:
+        result = date(int(year or today.year), int(month), int(day))
+    except ValueError:
+        return None
+    if year is None and result > today:
+        try:
+            result = result.replace(year=today.year - 1)
+        except ValueError:  # 29.02, а прошлый год не високосный
+            return None
+    return result
+
+
+def local_day_start(day: date, tz: str) -> datetime:
+    """Полночь дня day в часовом поясе пользователя."""
+    return datetime.combine(day, time(), tzinfo=ZoneInfo(tz))
+
+
+def format_local_date(dt: datetime, tz: str) -> str:
+    local = dt.astimezone(ZoneInfo(tz))
+    return f"{local.day} {MONTHS[local.month - 1]} {local.year}"

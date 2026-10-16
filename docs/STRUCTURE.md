@@ -31,6 +31,7 @@ bloomy_bot/
 │   │   ├── user/               # регистрация, пара, авторизация Mini App
 │   │   ├── dates/              # свидания, напоминания, фоновые задачи
 │   │   ├── reviews/            # отзывы, фото и видео
+│   │   ├── games/              # журнал игр: каталог пары, игровые вечера, отзывы о вечерах
 │   │   └── admin/              # админ-API по X-API-Key
 │   │
 │   └── scripts/
@@ -133,7 +134,8 @@ bloomy_bot/
 
 - Время в БД хранится в UTC (`DateTime(timezone=True)`), в часовой пояс пользователя (`users.timezone`) переводится только при вводе и показе — через `core/time.py`.
 - `users.id` — это Telegram user id (`BigInteger`), автоинкремента нет. Пара — `users.partner_id`.
-- `dates.id` и `date_reviews.id` — UUID.
+- `dates.id`, `date_reviews.id`, `games.id`, `game_sessions.id`, `game_session_reviews.id` — UUID.
+- Игра принадлежит паре: `games.created_by` — тот, кто завёл, доступ — у него и его партнёра (`users.partner_id`). Обложки игр — в S3 под `games/<game_id>/<cover_id>.jpg`, при замене ключ новый.
 - Фото и видео отзывов лежат в таблице `date_review_photos` (видео отличается по `content_type = video/mp4`) и в S3 под ключом `reviews/<review_id>/<photo_id>.<jpg|png|mp4>`. `tg_file_id` есть только у файлов, присланных боту: по нему бот пересылает их без скачивания. Видео ограничено 20 МБ — больше бот не может скачать из Telegram. Файлы из Mini App (`tg_file_id = NULL`) бот отправляет из хранилища, а API отдаёт их через `GET /reviews/photos/{id}`.
 - Логика рассылки после нового отзыва (`notify.announce_review`) общая для бота и API.
 - Сообщения бота — в HTML (`ParseMode.HTML`), пользовательский текст экранируется через `html.escape`.
