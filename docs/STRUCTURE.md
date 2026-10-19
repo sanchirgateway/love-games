@@ -35,7 +35,9 @@ bloomy_bot/
 │   │   └── admin/              # админ-API по X-API-Key
 │   │
 │   └── scripts/
-│       └── set_avatar.py       # разовая установка аватарки бота
+│       ├── set_avatar.py       # разовая установка аватарки бота
+│       ├── compress_photos.py  # пережать старые фото из Mini App
+│       └── restore_media.py    # докачать из Telegram файлы, пропавшие из хранилища
 │
 ├── config/
 │   └── config.py               # настройки из env / .env.dev (DB_, BOT_, APP_, S3_)

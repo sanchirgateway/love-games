@@ -4,6 +4,7 @@ from typing import Any
 
 import aioboto3
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 from config.config import s3_settings
 
@@ -33,6 +34,17 @@ async def download(key: str) -> bytes:
         obj = await s3.get_object(Bucket=s3_settings.bucket, Key=key)
         async with obj["Body"] as body:
             return await body.read()
+
+
+async def exists(key: str) -> bool:
+    async with _client() as s3:
+        try:
+            await s3.head_object(Bucket=s3_settings.bucket, Key=key)
+        except ClientError as e:
+            if e.response["Error"]["Code"] in ("404", "NoSuchKey", "NotFound"):
+                return False
+            raise
+        return True
 
 
 async def delete(key: str) -> None:

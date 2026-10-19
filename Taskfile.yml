@@ -63,6 +63,11 @@ tasks:
     cmds:
       - uv run python -m app.scripts.compress_photos {{.CLI_ARGS}}
 
+  media:restore:
+    desc: 'Докачать из Telegram файлы, которых нет в хранилище: task media:restore (посчитать) / task media:restore -- --apply'
+    cmds:
+      - uv run python -m app.scripts.restore_media {{.CLI_ARGS}}
+
   # --- Миграции ---
 
   migrate:
