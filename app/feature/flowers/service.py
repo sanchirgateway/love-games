@@ -107,6 +107,8 @@ class FlowerService:
             comment=_clean(comment, "Комментарий"),
             price=price,
             given_at=given_at,
+            # Явно пустой список: без фото коллекция иначе не загружена, и обращение к ней — ленивый запрос (MissingGreenlet)
+            photos=[],
         )
         uploaded: list[str] = []
         try:
