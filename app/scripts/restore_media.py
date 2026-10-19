@@ -17,6 +17,7 @@ from sqlalchemy import select
 from app.core import storage
 from app.core.bot import create_bot
 from app.core.db import engine, session_maker
+from app.feature.flowers.models import FlowerGiftPhoto
 from app.feature.games.models import Game
 from app.feature.reviews.models import DateReviewPhoto
 
@@ -27,9 +28,15 @@ async def main(apply: bool) -> None:
         games = await session.scalars(
             select(Game).where(Game.cover_key.is_not(None), Game.cover_tg_file_id.is_not(None))
         )
-        # (ключ в хранилище, file_id в Telegram, content_type)
-        files = [(p.key, p.tg_file_id, p.content_type) for p in photos]
-        files += [(g.cover_key, g.cover_tg_file_id, g.cover_content_type or "image/jpeg") for g in games]
+        flowers = await session.scalars(select(FlowerGiftPhoto).where(FlowerGiftPhoto.tg_file_id.is_not(None)))
+        # (ключ в хранилище, file_id в Telegram, content_type). None отсеял WHERE — проверки для типизации
+        files = [(p.key, p.tg_file_id, p.content_type) for p in photos if p.tg_file_id]
+        files += [
+            (g.cover_key, g.cover_tg_file_id, g.cover_content_type or "image/jpeg")
+            for g in games
+            if g.cover_key and g.cover_tg_file_id
+        ]
+        files += [(p.key, p.tg_file_id, "image/jpeg") for p in flowers if p.tg_file_id]
     await engine.dispose()
     print(f"Files with tg_file_id: {len(files)}{'' if apply else ' (dry run, add --apply to write)'}")
 

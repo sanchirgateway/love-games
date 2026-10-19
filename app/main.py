@@ -16,6 +16,8 @@ from app.feature.admin import router as admin_router
 from app.feature.dates import handlers as dates_handlers
 from app.feature.dates import jobs as dates_jobs
 from app.feature.dates import router as dates_router
+from app.feature.flowers import handlers as flowers_handlers
+from app.feature.flowers import router as flowers_router
 from app.feature.games import handlers as games_handlers
 from app.feature.games import router as games_router
 from app.feature.reviews import handlers as reviews_handlers
@@ -32,7 +34,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     bot = create_bot()
     app.state.bot = bot
     dp = create_dispatcher(
-        user_handlers.router, dates_handlers.router, reviews_handlers.router, games_handlers.router
+        user_handlers.router,
+        dates_handlers.router,
+        reviews_handlers.router,
+        games_handlers.router,
+        flowers_handlers.router,
     )
     await set_commands(bot)
     polling = asyncio.create_task(dp.start_polling(bot, handle_signals=False))
@@ -77,6 +83,7 @@ def create_app() -> FastAPI:
     api.include_router(dates_router.router)
     api.include_router(reviews_router.router)
     api.include_router(games_router.router)
+    api.include_router(flowers_router.router)
     api.include_router(admin_router.router)
     app.include_router(api)
 
