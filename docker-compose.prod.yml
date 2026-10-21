@@ -21,7 +21,7 @@ x-app-common: &app-common
     S3_BUCKET: ${S3_BUCKET:-photos}
     APP_DEBUG: 'false'
     APP_ADMIN_API_KEY: ${APP_ADMIN_API_KEY:-}
-    APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:-*}
+    APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:?}
   logging: &logging
     driver: json-file
     options:
