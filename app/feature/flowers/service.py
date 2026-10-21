@@ -13,6 +13,7 @@ from app.feature.flowers.models import (
     FlowerGift,
     FlowerGiftPhoto,
     FlowerOccasion,
+    FlowerPhotoAuthor,
     FlowerReaction,
 )
 from app.feature.flowers.repository import FlowerRepository
@@ -155,6 +156,12 @@ class FlowerService:
 
     async def count_given(self, user_id: int) -> int:
         return await self.repo.count_given(user_id)
+
+    async def list_photos(
+        self, user_id: int, author: FlowerPhotoAuthor = FlowerPhotoAuthor.MINE
+    ) -> list[FlowerGiftPhoto]:
+        """Фото из видимых пользователю букетов: фото партнёра из невручённого ему букета не попадут."""
+        return await self.repo.list_photos(user_id, author)
 
     async def get_photo(self, photo_id: UUID, user_id: int) -> FlowerGiftPhoto:
         photo = await self.repo.get_photo(photo_id)

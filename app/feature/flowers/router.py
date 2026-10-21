@@ -3,13 +3,13 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Query, Response, UploadFile, status
 
 from app.core import storage
 from app.core.api import BotDep, SessionDep
 from app.feature.flowers import notify
-from app.feature.flowers.models import MAX_FLOWER_PHOTOS, FlowerGift, FlowerOccasion
-from app.feature.flowers.schemas import FlowerGiftOut, FlowerGive, FlowerReactionIn
+from app.feature.flowers.models import MAX_FLOWER_PHOTOS, FlowerGift, FlowerOccasion, FlowerPhotoAuthor
+from app.feature.flowers.schemas import FlowerGiftOut, FlowerGive, FlowerPhotoListOut, FlowerReactionIn
 from app.feature.flowers.service import (
     FLOWERS_MAX,
     MAX_PHOTO_SIZE,
@@ -57,6 +57,20 @@ async def list_flowers(user: CurrentUser, session: SessionDep) -> list[FlowerGif
     """Букеты от пользователя (включая невручённые) и врученные ему. Сначала невручённые, потом свежие."""
     gifts = await FlowerService(session).list_for_user(user.id)
     return [FlowerGiftOut.for_viewer(gift, user.id) for gift in gifts]
+
+
+# Объявлен раньше /flowers/{gift_id}, иначе "photos" попадёт туда как gift_id
+@router.get("/flowers/photos", response_model=list[FlowerPhotoListOut])
+async def list_photos(
+    user: CurrentUser,
+    session: SessionDep,
+    author: Annotated[
+        FlowerPhotoAuthor, Query(description="mine — свои, partner — партнёра, all — свои и партнёра")
+    ] = FlowerPhotoAuthor.MINE,
+) -> list[FlowerPhotoListOut]:
+    """Фото из всех видимых букетов, свежие первыми. Сюрприз партнёра (невручённый букет) не раскрывается."""
+    photos = await FlowerService(session).list_photos(user.id, author)
+    return [FlowerPhotoListOut.model_validate(photo) for photo in photos]
 
 
 @router.post("/flowers", response_model=FlowerGiftOut, status_code=status.HTTP_201_CREATED)

@@ -40,6 +40,14 @@ class FlowerReaction(enum.StrEnum):
     MEH = "meh"  # 😐
 
 
+class FlowerPhotoAuthor(enum.StrEnum):
+    """Чьи фото букетов показывать в общей ленте."""
+
+    MINE = "mine"
+    PARTNER = "partner"
+    ALL = "all"
+
+
 class FlowerGift(Base):
     """Подаренный букет. Пока given_at пустой — это сюрприз: получатель запись не видит."""
 

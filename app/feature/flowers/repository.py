@@ -3,7 +3,7 @@ from uuid import UUID
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.feature.flowers.models import FlowerGift, FlowerGiftPhoto
+from app.feature.flowers.models import FlowerGift, FlowerGiftPhoto, FlowerPhotoAuthor
 
 
 class FlowerRepository:
@@ -39,6 +39,29 @@ class FlowerRepository:
             .order_by(FlowerGift.given_at.desc().nulls_first(), FlowerGift.created_at.desc())
             .limit(limit)
         )
+        result = await self.session.scalars(stmt)
+        return list(result)
+
+    async def list_photos(self, user_id: int, author: FlowerPhotoAuthor) -> list[FlowerGiftPhoto]:
+        """Фото из букетов, которые пользователь видит (как в list_for_user). Свежие первыми.
+
+        Автор фото — всегда один из двух участников букета, так что «партнёр» — это просто не сам пользователь.
+        """
+        stmt = (
+            select(FlowerGiftPhoto)
+            .join(FlowerGift, FlowerGift.id == FlowerGiftPhoto.gift_id)
+            .where(
+                or_(
+                    FlowerGift.giver_id == user_id,
+                    and_(FlowerGift.recipient_id == user_id, FlowerGift.given_at.is_not(None)),
+                )
+            )
+            .order_by(FlowerGiftPhoto.created_at.desc(), FlowerGiftPhoto.position)
+        )
+        if author == FlowerPhotoAuthor.MINE:
+            stmt = stmt.where(FlowerGiftPhoto.author_id == user_id)
+        elif author == FlowerPhotoAuthor.PARTNER:
+            stmt = stmt.where(FlowerGiftPhoto.author_id != user_id)
         result = await self.session.scalars(stmt)
         return list(result)
 

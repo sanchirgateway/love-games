@@ -94,6 +94,7 @@ Telegram-бот для пар: помогает планировать свид�
 | POST | `/game-sessions/{id}/reviews` | Отзыв о вечере: `{"rating", "mood", "liked", "disliked", "comment"}` |
 | GET | `/flowers` | Букеты: свои (включая невручённые) и врученные вам |
 | POST | `/flowers` | Записать букет (`multipart/form-data`, см. ниже) |
+| GET | `/flowers/photos?author=mine\|partner\|all` | Фото букетов (`id`, `gift_id`, `author_id`, `position`, `size`, `created_at`), свежие первыми. По умолчанию `mine`; фото партнёра — только из видимых вам букетов |
 | GET | `/flowers/{id}` | Один букет |
 | POST | `/flowers/{id}/give` | Подтвердить вручение: `{"given_at"}` (необязательно, по умолчанию — сейчас) |
 | PUT | `/flowers/{id}/reaction` | Реакция получателя: `{"reaction"}` |

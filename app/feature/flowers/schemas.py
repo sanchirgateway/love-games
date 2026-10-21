@@ -15,6 +15,11 @@ class FlowerPhotoOut(BaseModel):
     size: int
 
 
+class FlowerPhotoListOut(FlowerPhotoOut):
+    gift_id: UUID  # букет: GET /api/v1/flowers/{gift_id}
+    created_at: datetime
+
+
 class FlowerGiftOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
