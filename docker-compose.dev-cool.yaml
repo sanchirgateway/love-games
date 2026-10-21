@@ -16,6 +16,6 @@ services:
       S3_BUCKET: ${S3_BUCKET:-photos}
       APP_DEBUG: ${APP_DEBUG:-true}
       APP_ADMIN_API_KEY: ${APP_ADMIN_API_KEY:-}
-      APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:?}
+      APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:-*}
       SERVICE_FQDN_APP_8000:
     command: ['sh', '-c', 'alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers']

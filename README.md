@@ -232,7 +232,7 @@ Telegram-бот для пар: помогает планировать свид�
 | GET | `/admin/dates?user_id=&status=&upcoming=&limit=&offset=` | Все свидания с фильтрами |
 | GET | `/admin/dates/{id}` | Любое свидание |
 
-CORS: в debug разрешён любой домен, в проде — только из `APP_CORS_ORIGINS`.
+CORS: в debug разрешён любой домен, в проде — из `APP_CORS_ORIGINS` (по умолчанию `*`, любой домен).
 
 ## Настройки
 
@@ -246,7 +246,7 @@ CORS: в debug разрешён любой домен, в проде — тол�
 | `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` | Хранилище фото и видео |
 | `APP_DEBUG` | Debug-режим API |
 | `APP_ADMIN_API_KEY` | Ключ админ-API |
-| `APP_CORS_ORIGINS` | Домены фронта через запятую |
+| `APP_CORS_ORIGINS` | Домены фронта через запятую, `*` (по умолчанию) — любой домен |
 
 ## Запуск
 
