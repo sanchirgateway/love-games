@@ -60,6 +60,8 @@ class DateEvent(Base):
 
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     invitee_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    # Идея, из совпадения по которой назначено свидание
+    idea_id: Mapped[UUID | None] = mapped_column(ForeignKey("date_ideas.id", ondelete="SET NULL"), index=True)
 
     # lazy="joined": автор и приглашённый подгружаются тем же запросом (в async ленивая загрузка не работает)
     creator: Mapped[User] = relationship(foreign_keys=[created_by], lazy="joined")

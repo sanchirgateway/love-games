@@ -20,10 +20,16 @@ from app.feature.flowers import handlers as flowers_handlers
 from app.feature.flowers import router as flowers_router
 from app.feature.games import handlers as games_handlers
 from app.feature.games import router as games_router
+from app.feature.ideas import handlers as ideas_handlers
+from app.feature.ideas import router as ideas_router
 from app.feature.reviews import handlers as reviews_handlers
 from app.feature.reviews import router as reviews_router
+from app.feature.stats import handlers as stats_handlers
+from app.feature.stats import router as stats_router
 from app.feature.user import handlers as user_handlers
 from app.feature.user import router as user_router
+from app.feature.wishlist import handlers as wishlist_handlers
+from app.feature.wishlist import router as wishlist_router
 from config.config import app_settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -39,6 +45,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         reviews_handlers.router,
         games_handlers.router,
         flowers_handlers.router,
+        ideas_handlers.router,
+        wishlist_handlers.router,
+        stats_handlers.router,
     )
     await set_commands(bot)
     polling = asyncio.create_task(dp.start_polling(bot, handle_signals=False))
@@ -84,6 +93,9 @@ def create_app() -> FastAPI:
     api.include_router(reviews_router.router)
     api.include_router(games_router.router)
     api.include_router(flowers_router.router)
+    api.include_router(ideas_router.router)
+    api.include_router(wishlist_router.router)
+    api.include_router(stats_router.router)
     api.include_router(admin_router.router)
     app.include_router(api)
 

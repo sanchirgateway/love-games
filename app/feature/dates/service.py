@@ -34,8 +34,9 @@ class DateService:
         address: str | None = None,
         description: str | None = None,
         ends_at: datetime | None = None,
+        idea_id: UUID | None = None,
     ) -> DateEvent:
-        """Создаёт свидание с партнёром автора в статусе «предложено»."""
+        """Создаёт свидание с партнёром автора в статусе «предложено». idea_id — если из совпадения по идее."""
         if starts_at.tzinfo is None:
             raise AppError("Время должно быть с часовым поясом")
         if starts_at <= datetime.now(UTC):
@@ -55,6 +56,7 @@ class DateService:
                 status=DateStatus.PROPOSED,
                 created_by=author_id,
                 invitee_id=partner.id,
+                idea_id=idea_id,
             )
         )
         await self.session.commit()

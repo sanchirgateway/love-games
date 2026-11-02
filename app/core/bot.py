@@ -25,6 +25,9 @@ BOT_COMMANDS = [
     BotCommand(command="played", description="Записать игровой вечер"),
     BotCommand(command="games", description="Наши игры"),
     BotCommand(command="flowers", description="Цветы: подаренные букеты"),
+    BotCommand(command="ideas", description="Идеи для свиданий"),
+    BotCommand(command="wishlist", description="Вишлист: что подарить"),
+    BotCommand(command="stats", description="Наша статистика"),
     BotCommand(command="cancel", description="Отменить текущее действие"),
     BotCommand(command="help", description="Список команд"),
 ]

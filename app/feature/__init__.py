@@ -2,11 +2,15 @@
 from app.feature.dates.models import DateEvent, DateStatus
 from app.feature.flowers.models import FlowerGift, FlowerGiftPhoto, FlowerOccasion, FlowerReaction
 from app.feature.games.models import Game, GameMood, GameSession, GameSessionReview, GameStatus
+from app.feature.ideas.models import DateIdea, DateIdeaVote, IdeaVote
 from app.feature.reviews.models import DateReview, DateReviewPhoto
 from app.feature.user.models import User
+from app.feature.wishlist.models import WishItem
 
 __all__ = [
     "DateEvent",
+    "DateIdea",
+    "DateIdeaVote",
     "DateReview",
     "DateReviewPhoto",
     "DateStatus",
@@ -19,5 +23,7 @@ __all__ = [
     "GameSession",
     "GameSessionReview",
     "GameStatus",
+    "IdeaVote",
     "User",
+    "WishItem",
 ]

@@ -37,4 +37,5 @@ class DateOut(BaseModel):
     cancelled_at: datetime | None
     cancelled_by: int | None
     cancel_reason: str | None
+    idea_id: UUID | None  # свидание назначено из совпадения по идее
     created_at: datetime
