@@ -1,14 +1,17 @@
+from contextlib import suppress
 from datetime import UTC, datetime
 from html import escape
 from uuid import UUID
 
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InaccessibleMessage, InlineKeyboardMarkup, Message, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.errors import ConflictError
 from app.core.time import format_local, parse_local_datetime
 from app.feature.dates import notify
 from app.feature.dates.keyboards import (
@@ -122,7 +125,14 @@ async def new_place(message: Message, state: FSMContext, session: AsyncSession, 
 async def answer_invite(
     callback: CallbackQuery, callback_data: DateAnswer, session: AsyncSession, bot: Bot
 ) -> None:
-    date = await DateService(session).respond(callback_data.date_id, callback.from_user.id, callback_data.accept)
+    try:
+        date = await DateService(session).respond(callback_data.date_id, callback.from_user.id, callback_data.accept)
+    except ConflictError:
+        # Приглашение уже неактуально (истекло, отменено или на него ответили) — убираем кнопки из сообщения
+        if callback.message is not None and not isinstance(callback.message, InaccessibleMessage):
+            with suppress(TelegramAPIError):
+                _ = await callback.message.edit_reply_markup(reply_markup=None)
+        raise  # текст ошибки покажет общий обработчик AppError
     await notify.send_answer(bot, date)
 
     result = "✅ Вы приняли приглашение" if date.status == DateStatus.PLANNED else "❌ Вы отказались"

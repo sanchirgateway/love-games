@@ -19,12 +19,15 @@ INTERVAL_SECONDS = 60
 # Просим отзыв только о свиданиях, отмеченных вовремя. Старые свидания, которые задача доразметит
 # после простоя или при первом запуске, пусть остаются без просьбы — иначе придёт пачка сообщений
 REVIEW_REQUEST_MAX_AGE = DONE_AFTER + timedelta(days=1)
+# То же для просроченных приглашений: о давно прошедших (например, при первом запуске) не сообщаем
+UNANSWERED_NOTIFY_MAX_AGE = timedelta(days=1)
 
 
 async def dates_loop(bot: Bot) -> None:
     """Раз в INTERVAL_SECONDS шлёт напоминания и отмечает прошедшие свидания. Работает, пока задачу не отменят."""
     steps = (
         (send_reminders, "Не удалось отправить напоминания о свиданиях"),
+        (cancel_unanswered_dates, "Не удалось отменить приглашения без ответа"),
         (complete_past_dates, "Не удалось отметить прошедшие свидания"),
         (send_review_reminders, "Не удалось напомнить об отзывах"),
     )
@@ -43,6 +46,18 @@ async def send_reminders(bot: Bot) -> None:
         due = await DateService(session).take_due_reminders()
     for date, reminder in due:
         await notify.send_reminder(bot, date, reminder)
+
+
+async def cancel_unanswered_dates(bot: Bot) -> None:
+    async with session_maker() as session:
+        dates = await DateService(session).cancel_unanswered()
+    if not dates:
+        return
+    logger.info("Отменено приглашений без ответа: %s", len(dates))
+    oldest = datetime.now(UTC) - UNANSWERED_NOTIFY_MAX_AGE
+    for date in dates:
+        if date.starts_at >= oldest:
+            await notify.send_unanswered(bot, date)
 
 
 async def complete_past_dates(bot: Bot) -> None:

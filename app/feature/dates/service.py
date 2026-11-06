@@ -12,11 +12,23 @@ from app.feature.user.service import UserService
 # Через сколько после начала принятое свидание считается состоявшимся
 DONE_AFTER = timedelta(hours=8)
 CANCEL_REASON_MAX = 500
+# Причина отмены приглашения, на которое не ответили до начала свидания
+UNANSWERED_REASON = "Приглашение осталось без ответа"
 
 
 def can_cancel(date: DateEvent) -> bool:
     """Отменить можно предложенное или принятое свидание, пока оно не началось."""
     return date.status in (DateStatus.PROPOSED, DateStatus.PLANNED) and date.starts_at > datetime.now(UTC)
+
+
+def _check_invite_active(date: DateEvent) -> None:
+    """Ответить на приглашение или отправить его ещё раз можно, только пока оно ждёт ответа и время не прошло."""
+    if date.status == DateStatus.CANCELLED:
+        raise ConflictError("Свидание отменено")
+    if date.status != DateStatus.PROPOSED:
+        raise ConflictError("На это приглашение уже ответили")
+    if date.starts_at <= datetime.now(UTC):
+        raise ConflictError("Время свидания уже прошло — приглашение больше не действует")
 
 
 class DateService:
@@ -67,8 +79,7 @@ class DateService:
         date = await self.get_for_user(date_id, user_id)
         if date.invitee_id != user_id:
             raise ForbiddenError("Ответить на приглашение может только приглашённый")
-        if date.status != DateStatus.PROPOSED:
-            raise ConflictError("На это приглашение уже ответили")
+        _check_invite_active(date)
 
         date.status = DateStatus.PLANNED if accept else DateStatus.DECLINED
         if accept:
@@ -82,8 +93,7 @@ class DateService:
         date = await self.get_for_user(date_id, user_id)
         if date.created_by != user_id:
             raise ForbiddenError("Отправить приглашение ещё раз может только автор")
-        if date.status != DateStatus.PROPOSED:
-            raise ConflictError("На это приглашение уже ответили")
+        _check_invite_active(date)
         return date
 
     async def mark_done(self, date_id: UUID, user_id: int) -> DateEvent:
@@ -120,6 +130,12 @@ class DateService:
     async def complete_past(self) -> list[DateEvent]:
         """Отмечает состоявшимися принятые свидания, с начала которых прошло DONE_AFTER."""
         date_ids = await self.repo.mark_done_after(datetime.now(UTC), DONE_AFTER)
+        await self.session.commit()
+        return await self.repo.list_by_ids(date_ids) if date_ids else []
+
+    async def cancel_unanswered(self) -> list[DateEvent]:
+        """Отменяет приглашения, на которые не ответили до начала свидания."""
+        date_ids = await self.repo.cancel_unanswered(datetime.now(UTC), UNANSWERED_REASON)
         await self.session.commit()
         return await self.repo.list_by_ids(date_ids) if date_ids else []
 

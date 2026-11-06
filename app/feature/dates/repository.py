@@ -69,6 +69,22 @@ class DateRepository:
         result = await self.session.scalars(stmt)
         return list(result)
 
+    async def cancel_unanswered(self, now: datetime, reason: str) -> list[UUID]:
+        """Отменяет предложенные свидания, время которых наступило, а ответа так и нет. Возвращает их id.
+
+        cancelled_by остаётся пустым — отменил не участник, а бот. cancelled_at — время начала свидания,
+        а не запуска задачи: так же, как done_at в mark_done_after.
+        """
+        stmt = (
+            update(DateEvent)
+            .where(DateEvent.status == DateStatus.PROPOSED, DateEvent.starts_at <= now)
+            .values(status=DateStatus.CANCELLED, cancelled_at=DateEvent.starts_at, cancel_reason=reason)
+            .returning(DateEvent.id)
+            .execution_options(synchronize_session=False)
+        )
+        result = await self.session.scalars(stmt)
+        return list(result)
+
     async def list_by_ids(self, date_ids: list[UUID]) -> list[DateEvent]:
         result = await self.session.scalars(select(DateEvent).where(DateEvent.id.in_(date_ids)))
         return list(result)

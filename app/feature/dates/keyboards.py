@@ -67,8 +67,8 @@ class DateCancelStart(CallbackData, prefix="date_cancel"):
 
 
 def can_resend_invite(date: DateEvent, user_id: int) -> bool:
-    """Автор может повторить приглашение, пока на него не ответили (например, если первое не дошло)."""
-    return date.status == DateStatus.PROPOSED and date.created_by == user_id
+    """Автор может повторить приглашение, пока на него не ответили и свидание не началось (например, если первое не дошло)."""
+    return date.status == DateStatus.PROPOSED and date.created_by == user_id and date.starts_at > datetime.now(UTC)
 
 
 def can_mark_done(date: DateEvent) -> bool:

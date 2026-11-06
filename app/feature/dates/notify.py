@@ -61,8 +61,12 @@ async def send_answer(bot: Bot, date: DateEvent) -> None:
 
 def cancelled_note(date: DateEvent) -> str:
     """Кто и почему отменил свидание — для карточки и уведомления."""
+    reason = f"<b>Причина:</b> {escape(date.cancel_reason or '')}"
+    if date.cancelled_by is None:
+        # Отменил бот: приглашение осталось без ответа до начала свидания
+        return f"🚫 Свидание отменено\n{reason}"
     who = date.creator if date.cancelled_by == date.created_by else date.invitee
-    return f"🚫 {escape(who.first_name)} отменил(а) свидание\n<b>Причина:</b> {escape(date.cancel_reason or '')}"
+    return f"🚫 {escape(who.first_name)} отменил(а) свидание\n{reason}"
 
 
 async def send_cancelled(bot: Bot, date: DateEvent) -> None:
@@ -70,6 +74,20 @@ async def send_cancelled(bot: Bot, date: DateEvent) -> None:
     partner = date.invitee if date.cancelled_by == date.created_by else date.creator
     text = f"{cancelled_note(date)}\n\n{describe(date, partner)}"
     _ = await _safe_send(bot, partner.id, text, date)
+
+
+async def send_unanswered(bot: Bot, date: DateEvent) -> None:
+    """Сообщает обоим, что приглашение осталось без ответа и свидание отменено."""
+    creator_text = (
+        f"⌛ {escape(date.invitee.first_name)} так и не ответил(а) на приглашение — свидание отменено\n\n"
+        f"{describe(date, date.creator)}"
+    )
+    invitee_text = (
+        f"⌛ Приглашение от {escape(date.creator.first_name)} истекло — свидание отменено\n\n"
+        f"{describe(date, date.invitee)}"
+    )
+    _ = await _safe_send(bot, date.creator.id, creator_text, date)
+    _ = await _safe_send(bot, date.invitee.id, invitee_text, date)
 
 
 async def send_reminder(bot: Bot, date: DateEvent, reminder: Reminder) -> None:
