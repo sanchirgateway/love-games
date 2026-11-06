@@ -1,4 +1,5 @@
 # Импорт всех моделей, чтобы они попали в Base.metadata (нужно Alembic'у и для связей между моделями)
+from app.feature.bouquets.models import VirtualBouquet
 from app.feature.dates.models import DateEvent, DateStatus
 from app.feature.flowers.models import FlowerGift, FlowerGiftPhoto, FlowerOccasion, FlowerReaction
 from app.feature.games.models import Game, GameMood, GameSession, GameSessionReview, GameStatus
@@ -25,5 +26,6 @@ __all__ = [
     "GameStatus",
     "IdeaVote",
     "User",
+    "VirtualBouquet",
     "WishItem",
 ]

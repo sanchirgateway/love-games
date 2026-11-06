@@ -13,6 +13,7 @@ from app.core.bot import create_bot, create_dispatcher, set_commands
 from app.core.db import engine
 from app.core.errors import AppError
 from app.feature.admin import router as admin_router
+from app.feature.bouquets import handlers as bouquets_handlers
 from app.feature.dates import handlers as dates_handlers
 from app.feature.dates import jobs as dates_jobs
 from app.feature.dates import router as dates_router
@@ -45,6 +46,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         reviews_handlers.router,
         games_handlers.router,
         flowers_handlers.router,
+        bouquets_handlers.router,
         ideas_handlers.router,
         wishlist_handlers.router,
         stats_handlers.router,
